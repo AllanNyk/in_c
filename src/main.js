@@ -505,6 +505,49 @@ function render() {
     }
   }
 
+  // ---- Unison light bridges --------------------------------------------
+  // Group unmuted voices by current patternIdx. Any group of ≥2 gets thin
+  // glowing strands drawn between every pair of voice positions. Strands
+  // brighten in pulses tied to the cluster's most recent note onset.
+  if (voices.length > 1) {
+    const clusters = new Map();
+    for (let i = 0; i < voices.length; i++) {
+      if (voices[i].muted) continue;
+      const k = voices[i].patternIdx;
+      if (!clusters.has(k)) clusters.set(k, []);
+      clusters.get(k).push(i);
+    }
+    for (const indices of clusters.values()) {
+      if (indices.length < 2) continue;
+      let clusterLastOnset = -1;
+      for (const i of indices) {
+        if (voices[i].lastOnsetTime > clusterLastOnset) {
+          clusterLastOnset = voices[i].lastOnsetTime;
+        }
+      }
+      const intensity = pulseFlash(now, clusterLastOnset, 0.45, 1) || 0;
+      const coreAlpha = 0.22 + intensity * 0.55;
+      const haloAlpha = 0.10 + intensity * 0.32;
+      for (let a = 0; a < indices.length; a++) {
+        const pa = voicePosition(indices[a], voices.length);
+        for (let b = a + 1; b < indices.length; b++) {
+          const pb = voicePosition(indices[b], voices.length);
+          // Soft halo
+          ctx2d.strokeStyle = `rgba(255, 228, 160, ${haloAlpha})`;
+          ctx2d.lineWidth = 6;
+          ctx2d.beginPath();
+          ctx2d.moveTo(pa.x, pa.y);
+          ctx2d.lineTo(pb.x, pb.y);
+          ctx2d.stroke();
+          // Bright core
+          ctx2d.strokeStyle = `rgba(255, 232, 170, ${coreAlpha})`;
+          ctx2d.lineWidth = 1;
+          ctx2d.stroke();
+        }
+      }
+    }
+  }
+
   // ---- Voices -----------------------------------------------------------
   for (let i = 0; i < voices.length; i++) {
     const v = voices[i];
