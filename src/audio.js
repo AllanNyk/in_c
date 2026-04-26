@@ -49,16 +49,30 @@ export class AudioEngine {
   }
 
   // Schedule a buffered note. `channel` is optional; defaults to master.
-  scheduleNote(channel, instrument, note, when, gain = 1.0) {
+  // If `duration` is given, applies a gain envelope that holds at full until
+  // `when + duration`, then linearly releases to 0 over `releaseTime`, and
+  // stops the source. Without `duration`, the sample plays its full natural
+  // length (right behavior for percussive samples with intrinsic decay).
+  scheduleNote(channel, instrument, note, when, gain = 1.0, duration = null, releaseTime = 0.01) {
     const key = `${instrument}:${note}`;
     const buf = this.buffers.get(key);
     if (!buf) return null;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     const noteGain = this.ctx.createGain();
-    noteGain.gain.value = gain;
-    src.connect(noteGain).connect(channel || this.master);
-    src.start(when);
+    if (duration != null) {
+      const stopAt = when + duration + releaseTime;
+      noteGain.gain.setValueAtTime(gain, when);
+      noteGain.gain.setValueAtTime(gain, when + duration);
+      noteGain.gain.linearRampToValueAtTime(0, stopAt);
+      src.connect(noteGain).connect(channel || this.master);
+      src.start(when);
+      src.stop(stopAt + 0.01);
+    } else {
+      noteGain.gain.value = gain;
+      src.connect(noteGain).connect(channel || this.master);
+      src.start(when);
+    }
     return when;
   }
 

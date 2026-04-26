@@ -4,10 +4,11 @@
 import { midiToFilename } from './score.js';
 
 export class Voice {
-  constructor({ instrument, range, color, figures, audio, slotIndex }) {
+  constructor({ instrument, range, color, sustained, figures, audio, slotIndex }) {
     this.instrument = instrument;
     this.range = range;
     this.color = color;
+    this.sustained = !!sustained;
     this.figures = figures;       // array of patterns [figure 1, figure 2, ..., figure 53]
     this.audio = audio;
     this.slotIndex = slotIndex;   // for stable ordering / placement
@@ -23,13 +24,18 @@ export class Voice {
     this.lastOnsetTime = -1;
     this.nextLoopStart = 0;
     this.spawnTime = audio.currentTime;
+    this.patternStartTime = audio.currentTime;
+    this.repeatLocked = false;    // true = stay on current figure; ignore auto-advance
 
     this._fitTransposition();
   }
 
   get currentPattern() { return this.figures[this.patternIdx]; }
-  get progress() { return this.patternIdx / 52; } // 0..1 across the score
-  get atEnd() { return this.patternIdx >= 52; }
+  get progress() {
+    return this.figures.length > 1 ? this.patternIdx / (this.figures.length - 1) : 0;
+  }
+  get atEnd() { return this.patternIdx >= this.figures.length - 1; }
+  get figureCount() { return this.figures.length; }
 
   // Choose octave shift to fit the current pattern within this voice's range,
   // preferring shifts that keep the pattern centered in the comfortable register.
@@ -67,15 +73,32 @@ export class Voice {
 
   toggleMute() { this.setMuted(!this.muted); }
 
+  toggleRepeat() { this.repeatLocked = !this.repeatLocked; }
+
   // Move forward/backward in the score by `steps` patterns.
   // Resets loopCount and re-fits transposition.
   advance(steps = 1) {
-    const newIdx = Math.max(0, Math.min(52, this.patternIdx + steps));
+    const last = this.figures.length - 1;
+    const newIdx = Math.max(0, Math.min(last, this.patternIdx + steps));
     if (newIdx !== this.patternIdx) {
       this.patternIdx = newIdx;
       this.loopCount = 0;
+      this.patternStartTime = this.audio.currentTime;
       this._fitTransposition();
     }
+  }
+
+  // Swap to a different roster instrument while keeping pattern position,
+  // gain, mute, audio channel, and loop boundary intact. Re-fits the
+  // octave transposition for the new range and preloads the new samples.
+  changeInstrument({ instrument, range, color, sustained }) {
+    if (instrument === this.instrument) return;
+    this.instrument = instrument;
+    this.range = range;
+    this.color = color;
+    this.sustained = !!sustained;
+    this._fitTransposition();
+    this.preloadSamples().catch(err => console.error('preload failed:', err));
   }
 
   // Schedule notes from this voice's current pattern up to the audio horizon.
@@ -92,7 +115,13 @@ export class Voice {
         const midi = n.midi + this.transposition;
         const file = midiToFilename(midi);
         const noteGain = n.grace ? 0.55 : 1.0;
-        this.audio.scheduleNote(this.channel, this.instrument, file, t, noteGain);
+        // Sustained instruments cut at the note's written end with a short
+        // release. Percussive instruments play the full sample (their
+        // recorded decay is the intended sound).
+        const dur = this.sustained && n.duration != null
+          ? n.duration * tempoFactor
+          : null;
+        this.audio.scheduleNote(this.channel, this.instrument, file, t, noteGain, dur);
         if (!n.grace && t > this.lastOnsetTime) this.lastOnsetTime = t;
       }
       this.nextLoopStart += pat.duration * tempoFactor;

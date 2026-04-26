@@ -96,9 +96,17 @@ build_instrument "vibraphone" "Vibraphone" 48 96 \
   87 "vibraphone-d#6.flac" \
   89 "vibraphone-f6.flac"
 
-# Grand Piano — using PP velocity for a soft Riley ostinato character.
-# Target chromatic C4..C7 (MIDI 60..96) — high register only for now.
-build_instrument "piano" "Grand Piano" 60 96 \
+# Grand Piano — PP velocity throughout for a soft Riley ostinato character.
+# Target chromatic C3..C7 (MIDI 48..96) — extended low range so the piano can
+# also serve as a mid/low roster voice distinct from the high-C ostinato.
+build_instrument "piano" "Grand Piano" 48 96 \
+  48 "PP C3.flac" \
+  50 "PP D3.flac" \
+  52 "PP E3.flac" \
+  53 "PP F3.flac" \
+  55 "PP G3.flac" \
+  57 "PP A3.flac" \
+  59 "PP B3.flac" \
   60 "PP C4.flac" \
   62 "PP D4.flac" \
   64 "PP E4.flac" \
@@ -173,5 +181,104 @@ build_instrument "harp" "Harp" 48 84 \
   78 "harp-f#5.wav" \
   81 "harp-a5.wav" \
   84 "harp-c6.wav"
+
+# Crotales — high metallic shimmer, naturally high register.
+# Naming: crotale-<note>-ff.flac. Sampled chromatically; we use minor-third sources.
+build_instrument "crotales" "Crotales" 84 96 \
+  84 "crotale-c6-ff.flac" \
+  87 "crotale-d#6-ff.flac" \
+  90 "crotale-f#6-ff.flac" \
+  93 "crotale-a6-ff.flac" \
+  96 "crotale-c7-ff.flac"
+
+# Harpsichord — plucked keyboard. Use the High set ("Sustains/High"), with
+# Sonatina's "Far" mic position for a rounder tone. Naming is unique:
+# HarpsiRH_High_Far_<note>_rr1.flac.
+build_instrument "harpsichord" "Harpsichord/Sustains/High" 48 72 \
+  49 "HarpsiRH_High_Far_C#3_rr1.flac" \
+  52 "HarpsiRH_High_Far_E3_rr1.flac" \
+  54 "HarpsiRH_High_Far_F#3_rr1.flac" \
+  56 "HarpsiRH_High_Far_G#3_rr1.flac" \
+  57 "HarpsiRH_High_Far_A3_rr2.flac" \
+  61 "HarpsiRH_High_Far_C#4_rr1.flac" \
+  62 "HarpsiRH_High_Far_D4_rr1.flac" \
+  64 "HarpsiRH_High_Far_E4_rr1.flac" \
+  66 "HarpsiRH_High_Far_F#4_rr1.flac" \
+  68 "HarpsiRH_High_Far_G#4_rr1.flac" \
+  70 "HarpsiRH_High_Far_A#4_rr1.flac" \
+  72 "HarpsiRH_High_Far_C5_rr1.flac"
+
+# Flute — woodwind, sampled at minor thirds. Naming: flute-<note>.wav.
+build_instrument "flute" "Flute" 60 84 \
+  57 "flute-a3.wav" \
+  60 "flute-c4.wav" \
+  63 "flute-d#4.wav" \
+  66 "flute-f#4.wav" \
+  69 "flute-a4.wav" \
+  72 "flute-c5.wav" \
+  75 "flute-d#5.wav" \
+  78 "flute-f#5.wav" \
+  81 "flute-a5.wav" \
+  84 "flute-c6.wav"
+
+# Clarinet — mellow woodwind. Sampled at minor thirds D/F/G#/B per octave.
+build_instrument "clarinet" "Clarinet" 50 83 \
+  50 "clarinet-d3.wav" \
+  53 "clarinet-f3.wav" \
+  56 "clarinet-g#3.wav" \
+  59 "clarinet-b3.wav" \
+  62 "clarinet-d4.wav" \
+  65 "clarinet-f4.wav" \
+  68 "clarinet-g#4.wav" \
+  71 "clarinet-b4.wav" \
+  74 "clarinet-d5.wav" \
+  77 "clarinet-f5.wav" \
+  80 "clarinet-g#5.wav" \
+  83 "clarinet-b5.wav" \
+  86 "clarinet-d6.wav"
+
+# Oboe — reedy woodwind. Sampled at major-third intervals A#/C#/E/G.
+build_instrument "oboe" "Oboe" 58 82 \
+  58 "oboe-a#3.wav" \
+  61 "oboe-c#4.wav" \
+  64 "oboe-e4.wav" \
+  67 "oboe-g4.wav" \
+  70 "oboe-a#4.wav" \
+  73 "oboe-c#5.wav" \
+  76 "oboe-e5.wav" \
+  79 "oboe-g5.wav" \
+  82 "oboe-a#5.wav" \
+  84 "oboe-c6.wav"
+
+# Double bass (solo) — bowed sustained, deep low register.
+# Filename pattern: bass-sus-<note>.flac. Sampled at minor thirds.
+build_instrument "doublebass" "Bass" 28 60 \
+  24 "bass-sus-c1.flac" \
+  27 "bass-sus-d#1.flac" \
+  30 "bass-sus-f#1.flac" \
+  33 "bass-sus-a1.flac" \
+  36 "bass-sus-c2.flac" \
+  39 "bass-sus-d#2.flac" \
+  42 "bass-sus-f#2.flac" \
+  45 "bass-sus-a2.flac" \
+  48 "bass-sus-c3.flac" \
+  51 "bass-sus-d#3.flac" \
+  54 "bass-sus-f#3.flac" \
+  57 "bass-sus-a3.flac" \
+  60 "bass-sus-c4.flac"
+
+# Cello — bowed string warmth in the low register.
+build_instrument "cello" "Cello" 36 65 \
+  36 "cello-c2.wav" \
+  39 "cello-d#2.wav" \
+  42 "cello-f#2.wav" \
+  45 "cello-a2.wav" \
+  48 "cello-c3.wav" \
+  51 "cello-d#3.wav" \
+  54 "cello-f#3.wav" \
+  57 "cello-a3.wav" \
+  60 "cello-c4.wav" \
+  63 "cello-d#4.wav" \
+  66 "cello-f#4.wav"
 
 echo "All done."

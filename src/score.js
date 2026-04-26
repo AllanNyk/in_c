@@ -39,15 +39,16 @@ function parsePart(partEl, divisions, transposeSemitones) {
   const measures = Array.from(partEl.querySelectorAll('measure'));
   const patterns = [];
 
+  // Time signature persists across measures — MusicXML only emits <time>
+  // when it CHANGES. Likewise for <divisions>.
+  let beats = 4, beatType = 4;
+
   for (const measure of measures) {
-    // Time signature can change per measure; default 4/4.
     const timeEl = measure.querySelector('time');
-    let beats = 4, beatType = 4;
     if (timeEl) {
       beats = parseInt(timeEl.querySelector('beats').textContent, 10);
       beatType = parseInt(timeEl.querySelector('beat-type').textContent, 10);
     }
-    // Divisions can theoretically change per measure too.
     const divEl = measure.querySelector('divisions');
     if (divEl) divisions = parseInt(divEl.textContent, 10);
 
@@ -84,6 +85,7 @@ function parsePart(partEl, divisions, transposeSemitones) {
       // Chord notes share the previous note's onset; rewind cursor for them.
       const onsetDivisions = isChord ? cursor - dur : cursor;
       const onsetSeconds = divisionsToSeconds(onsetDivisions);
+      const noteDurationSeconds = divisionsToSeconds(dur);
 
       const midi = readPitch(noteEl, transposeSemitones);
       if (midi != null) {
@@ -95,12 +97,17 @@ function parsePart(partEl, divisions, transposeSemitones) {
             time: onsetSeconds - GRACE_OFFSET,
             midi: pendingGraceMidi,
             grace: true,
+            duration: GRACE_OFFSET,
           });
           pendingGraceMidi = null;
         }
-        // Skip the onset of a tied-from-previous note (continuation).
-        if (!tieStop) {
-          notes.push({ time: onsetSeconds, midi });
+        if (tieStop && notes.length > 0) {
+          // Tied continuation: extend the previous note's duration instead of
+          // re-onsetting. (Assumes the prior pushed note is the tied-from note,
+          // which holds for the monophonic patterns in this score.)
+          notes[notes.length - 1].duration += noteDurationSeconds;
+        } else {
+          notes.push({ time: onsetSeconds, midi, duration: noteDurationSeconds });
         }
       }
 
@@ -139,11 +146,11 @@ export async function loadPatterns(url = 'In C.xml') {
 
   const allPatterns = parsePart(part, divisions, transposeSemitones);
 
-  // Bar 1 (index 0) = ostinato; bar 3,5,7... = figures 1..53.
+  // Bar 1 = ostinato; the rest of the figures are any subsequent measures with
+  // pitched notes. Spacer (rest-only) bars between figures in the score may not
+  // alternate strictly — the encoding has occasional double-rest gaps — so we
+  // discover figures by content rather than by fixed bar spacing.
   const ostinato = allPatterns[0];
-  const figures = [];
-  for (let i = 2; i < allPatterns.length && figures.length < 53; i += 2) {
-    figures.push(allPatterns[i]);
-  }
+  const figures = allPatterns.slice(1).filter(p => p.notes.length > 0);
   return { ostinato, figures };
 }

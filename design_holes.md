@@ -1,89 +1,78 @@
 # In C — Open Design Questions
 
-Browser-based generative-art game / visualization of Terry Riley's *In C*. The player is the **conductor** of an autonomous ensemble of up to 20 voices, each cycling through Riley's 53 melodic patterns. See conversation log for decided design; this file lists what's still open.
+Browser-based generative-art game / visualization of Terry Riley's *In C*.
+The player is the **conductor** of an autonomous ensemble of up to N voices,
+each cycling through Riley's 53 melodic patterns. See `roadmap.md` for the
+phased build status; this file lists what's still open.
+
+Resolved questions are documented at the bottom for reference.
 
 ---
 
-## 1. Spawn cooldown duration
+## 1. Spawn cooldown duration (revisit?)
 
-How long after spawning a voice before the next can be spawned?
-
-- **Tradeoff:** short cooldown lets the player build texture quickly (more dramatic, less Riley); long cooldown enforces the slow accumulation that makes the opening spacious.
-- **Proposal:** 20–30 seconds. Long enough for a new voice to settle in and the player to listen; short enough that all 20 voices can enter inside the first ~10 minutes.
-- **Variants worth considering:**
-  - Cooldown *shortens* as more voices are present (a thicker ensemble absorbs new entries faster).
-  - Cooldown *lengthens* over time (preserves contemplative pacing through the piece).
+Currently fixed at 20 s. Long enough that adding 11 voices spans roughly
+3.5 minutes of accumulation. Open: should it shorten as more voices are present
+(thicker ensemble absorbs new entries faster), or lengthen (preserves
+contemplative pacing)?
 
 ## 2. Global crescendo / diminuendo gesture
 
-Riley specifies the ensemble should swell together. How does the conductor invoke this?
+Riley specifies the ensemble should swell together. Still no explicit gesture.
 
-- **A. Vertical mouse drag in empty space.** Hold + drag up = crescendo, down = diminuendo. Most physical; risks accidental triggers.
-- **B. A slider at the top of the screen** next to the master volume. Discoverable, less expressive.
-- **C. Hold a key (e.g. spacebar) + scroll-wheel.** Composable with other gestures, slightly hidden.
-- **D. A dedicated zone** at the bottom of the screen — drag horizontally to shape a swell over time.
+- **A. Vertical mouse drag in empty space.** Hold + drag up = crescendo, down = diminuendo.
+- **B. Slider at the top of the screen** next to master volume.
+- **C. Hold spacebar + scroll-wheel.** Composable with other gestures.
+- **D. Dedicated zone** at the bottom of the screen.
 
-## 3. Tempo dial
+Tempo slider already lives in the top bar; an additional swell control there
+might overload it. The drag-in-empty-space option (A) is the most physical but
+risks accidental triggers when spawning voices.
 
-Riley leaves tempo to performers. Should the conductor have a tempo control?
+## 3. Spotlight mechanic — drop entirely, or earn its place?
 
-- **Pro:** another expressive lever; useful for slowing into the Conclude or pushing through dense passages.
-- **Con:** a fixed dial implies a fixed tempo, which the piece resists.
-- **Middle path:** no dial, but the player can **tap-tempo by clicking the ostinato** in rhythm; the engine drifts toward the tapped tempo.
+Currently dropped from the active toolkit. Mute/volume/repeat-lock probably
+cover the expressive needs. Revisit only if playtest finds a "hero a single
+voice" gesture missing.
 
-## 4. Spotlight mechanic
+## 4. Conclude transitions — finer specifics
 
-Earlier proposed; worth deciding whether it earns its place.
+High-level flow is decided and implemented (press 1 → ending mode → all hurry
+to the last figure → manual mute-to-end). Specifics still open:
 
-- **A. Hold-to-spotlight:** ducks every other voice's volume while held, focusing one voice.
-- **B. Momentary boost:** boosts the targeted voice without ducking others.
-- **C. Drop it.** Mute + volume + nudge + reverse already give rich texture control.
+- Currently in ending mode all dwell/loop checks are bypassed (effectively
+  N=1, T=0). Voices race to the end. Is that too abrupt? Should we keep MIN_LOOPS
+  but skip the dwell?
+- Should Conclude force-unlock all R-locked voices? Currently it doesn't, which
+  means a locked voice will never reach the final figure unless the user
+  manually unlocks. Live anchor or annoyance?
+- After all on the final figure: a second Conclude press could fade master to
+  zero as an alternative to one-by-one muting.
 
-Lean: **C**, unless playtest shows the player wants a "hero" gesture.
+## 5. Per-voice instrument visual identity
 
-## 5. Pulse / rhythm visualization
+Decided: rely on color hue + sonic identity + position; no per-instrument icon.
+Could revisit if 11+ voices feel hard to distinguish at a glance.
 
-How does each voice's circle visualize the rhythm of its current pattern?
+## 6. Recording / persistence
 
-- **A. Onset flash.** Circle brightens on each note onset. Simple, legible, you can count rhythms.
-- **B. Envelope pulse.** Radius breathes with attack/decay matching each note. Smoother, more analog.
-- **C. Mini-score ring.** Small dots arranged around the circle trace the pattern; each lights as it plays. A literal score-around-orbit visual.
-- **D. Combined.** Radius pulses with envelope, color/brightness flashes on onset.
+Phase 4 territory. Decisions:
 
-## 6. Auto-advance rule numbers
+- Visual artifact (mandala / trace): planned for Phase 4.
+- Audio recording / export: Phase 6.
+- Gesture-replay file: Phase 6.
 
-Voice auto-advances when it has looped its current pattern ≥ **N** times **AND** is no further than **K** patterns behind the ensemble's leading edge.
+---
 
-- Proposed defaults: **N = 4, K = 2**.
-- Both should be tunable via a config so we can taste-test once it's running.
+## Resolved
 
-## 7. Conclude transitions
-
-High-level flow is decided (press 1 → ending mode → all hurry to #53 → conduct final crescendos → fade out). Specifics still open:
-
-- In ending mode, how fast do trailing voices catch up? Just set N = 1, or shorten N progressively, or remove the K-window cap?
-- After all voices are on #53: does the player mute them one-by-one? Press Conclude a second time to fade the master? Both options simultaneously available?
-
-## 8. Visual identity per voice
-
-Decided: position around the ostinato, color cool→warm with pattern progress, size = volume, current pattern number as text inside.
-
-Open: should each voice's **instrument** be visually identifiable too?
-
-- **A. Distinct icon or glyph** (e.g. a small flute silhouette inside the flute circle).
-- **B. Distinct hue family** per instrument (warm browns for bassoon, cool silvers for vibraphone).
-- **C. Skip it** — rely on sonic identity, keep visuals abstract.
-
-## 9. Master controls layout
-
-Top-of-screen controls are agreed in principle. Open: exact set and arrangement.
-
-- Master volume slider — confirmed.
-- Conclude button — confirmed.
-- Crescendo/diminuendo control (depends on #2).
-- Tempo display or tap target (depends on #3).
-- Anything else? (Pause? Reset? Save recording?)
-
-## 10. Recording / persistence
-
-Not discussed yet but worth flagging: should a performance be **recordable** (audio export, or a replay file capturing the player's gestures)? An artistic piece often gains a lot from being shareable as a finished artifact.
+- **Spawn cooldown: 20s** — locked in.
+- **Crescendo gesture: tempo slider lives there but no swell-only control yet.**
+- **Tempo dial: ✓** added in Phase 2 (60–200 BPM slider, default 120).
+- **Pulse viz: ✓** rhythm rings (per-voice + ostinato) added in Phase 2.
+- **Auto-advance rule: ✓** redesigned during Phase 2 follow-up. Now uses
+  MIN_LOOPS=2 + MIN_DWELL=20s. Leading-edge K constraint was tried and
+  removed — it caused an ensemble traffic jam where each new spawn pulled
+  `minIdx` back to figure 1 and capped the leaders.
+- **Master controls: ✓** volume + tempo + Conclude in top bar.
+- **Per-voice instrument viz: skipped** — color + position is enough.

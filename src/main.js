@@ -16,9 +16,8 @@ import { ROSTER } from './roster.js';
 // ---- Tunable parameters ---------------------------------------------------
 
 const SPAWN_COOLDOWN     = 20.0;
-const AUTO_ADVANCE_N     = 4;
-const AUTO_ADVANCE_K     = 2;
-const ENDING_N           = 1;
+const AUTO_ADVANCE_MIN_LOOPS = 2;   // a voice plays each figure at least this many times
+const AUTO_ADVANCE_MIN_DWELL = 20;  // seconds — and stays at least this long, even on short figures
 const BASE_BPM           = 120;  // score is encoded as seconds-at-120-BPM
 const BASE_OSTINATO_INTERVAL = 0.25; // eighth at base BPM
 const SCHEDULER_LOOKAHEAD = 0.15;
@@ -52,17 +51,18 @@ let nextOstinatoTime = 0;
 let ostinatoStartTime = 0;
 const recentOstinatoOnsets = [];
 
-// Ostinato pitch can be C6 (84, default cap), C5 (72), or C4 (60).
+// Ostinato pitch can be C6 (84, cap), C5 (72, default start), or C4 (60).
 // Left-click cycles up (toward the cap), right-click cycles down.
 const OSTINATO_PITCH_MAX = 84;
 const OSTINATO_PITCH_MIN = 60;
+const OSTINATO_PITCH_DEFAULT = 72;
 const OSTINATO_PITCH_STEP = 12; // octave
 
 const ostinato = {
   channel: null,
-  gain: 0.55,
+  gain: 0.35,
   muted: false,
-  midi: OSTINATO_PITCH_MAX,
+  midi: OSTINATO_PITCH_DEFAULT,
   lastOnsetTime: -1,
   setGain(g) {
     this.gain = Math.max(0, Math.min(1, g));
@@ -221,8 +221,29 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'm' || e.key === 'M') {
     const target = hoveredTarget();
     if (target) target.toggleMute();
+    return;
+  }
+  // Voice-only keys below.
+  if (!hovered || hovered.kind !== 'voice') return;
+  if (e.key === 'r' || e.key === 'R') {
+    voices[hovered.idx].toggleRepeat();
+    return;
+  }
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    cycleVoiceInstrument(voices[hovered.idx], -1);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    cycleVoiceInstrument(voices[hovered.idx], +1);
   }
 });
+
+function cycleVoiceInstrument(voice, direction) {
+  const idx = ROSTER.findIndex(r => r.instrument === voice.instrument);
+  const start = idx >= 0 ? idx : 0;
+  const newIdx = (start + direction + ROSTER.length) % ROSTER.length;
+  voice.changeInstrument(ROSTER[newIdx]);
+}
 
 // ---- Spawn ----------------------------------------------------------------
 
@@ -240,6 +261,7 @@ async function spawnNextVoice() {
     instrument: cfg.instrument,
     range: cfg.range,
     color: cfg.color,
+    sustained: cfg.sustained,
     figures: patterns.figures,
     audio,
     slotIndex: slot,
@@ -253,12 +275,16 @@ async function spawnNextVoice() {
 
 function checkAutoAdvance() {
   if (voices.length === 0) return;
-  const minIdx = Math.min(...voices.map(v => v.patternIdx));
-  const N = endingMode ? ENDING_N : AUTO_ADVANCE_N;
+  const now = audio.currentTime;
   for (const v of voices) {
+    if (v.repeatLocked) continue;
     if (v.atEnd) continue;
-    if (v.loopCount < N) continue;
-    if (!endingMode && v.patternIdx + 1 > minIdx + AUTO_ADVANCE_K) continue;
+    if (v.loopCount < 1) continue; // always play each figure through at least once
+    if (!endingMode) {
+      if (v.loopCount < AUTO_ADVANCE_MIN_LOOPS) continue;
+      const dwell = now - v.patternStartTime;
+      if (dwell < AUTO_ADVANCE_MIN_DWELL) continue;
+    }
     v.advance(1);
   }
 }
@@ -336,8 +362,9 @@ function drawRhythmRing(cx, cy, baseRadius, pattern, loopStartTime, hslBase) {
   }
 }
 
-function drawHoverPanel(sx, sy, label, sublabel, gain, muted, fillColor) {
-  const w = 140, h = 64;
+function drawHoverPanel(sx, sy, label, sublabel, gain, muted, fillColor, extraHint) {
+  const w = 150;
+  const h = extraHint ? 78 : 64;
   ctx2d.fillStyle = 'rgba(255, 255, 255, 0.96)';
   ctx2d.strokeStyle = '#d0d0d0';
   ctx2d.lineWidth = 1;
@@ -352,14 +379,15 @@ function drawHoverPanel(sx, sy, label, sublabel, gain, muted, fillColor) {
   ctx2d.fillStyle = '#999';
   ctx2d.fillText(sublabel, sx + 10, sy + 22);
 
-  const barX = sx + 10, barY = sy + 40, barW = 120, barH = 5;
+  const barX = sx + 10, barY = sy + 40, barW = 130, barH = 5;
   ctx2d.fillStyle = '#eee';
   ctx2d.fillRect(barX, barY, barW, barH);
   ctx2d.fillStyle = muted ? '#bbb' : fillColor;
   ctx2d.fillRect(barX, barY, barW * gain, barH);
 
   ctx2d.fillStyle = '#888';
-  ctx2d.fillText(muted ? 'M: unmute · scroll: vol' : 'M: mute · scroll: vol', sx + 10, sy + 50);
+  ctx2d.fillText(muted ? 'M unmute · R lock · scroll vol' : 'M mute · R lock · scroll vol', sx + 10, sy + 50);
+  if (extraHint) ctx2d.fillText(extraHint, sx + 10, sy + 62);
 }
 
 function drawVoicePanel(v, voiceIdx) {
@@ -367,8 +395,18 @@ function drawVoicePanel(v, voiceIdx) {
   const cx = canvas.width / 2;
   const onLeftHalf = p.x < cx;
   const sx = onLeftHalf ? p.x + 40 : p.x - 170;
-  const sy = p.y - 32;
-  drawHoverPanel(sx, sy, v.instrument, `figure ${v.patternIdx + 1}/53`, v.gain, v.muted, voiceColor(v));
+  const sy = p.y - 38;
+  const total = v.figureCount;
+  const sublabel = v.repeatLocked
+    ? `figure ${v.patternIdx + 1}/${total} · locked`
+    : `figure ${v.patternIdx + 1}/${total}`;
+  drawHoverPanel(
+    sx, sy,
+    v.instrument,
+    sublabel,
+    v.gain, v.muted, voiceColor(v),
+    '← → swap instrument',
+  );
 }
 
 function drawOstinatoPanel() {
@@ -468,17 +506,11 @@ function render() {
   }
 
   // ---- Voices -----------------------------------------------------------
-  const leadingEdge = voices.length > 0 ? Math.max(...voices.map(v => v.patternIdx)) : 0;
-
   for (let i = 0; i < voices.length; i++) {
     const v = voices[i];
     const p = voicePosition(i, voices.length);
     const r = voiceRadius(v);
     const flash = pulseFlash(now, v.lastOnsetTime, 0.18, 6);
-
-    const lag = leadingEdge - v.patternIdx;
-    const isLeader = (lag === 0) && voices.length > 1;
-    const dimAlpha = lag <= 1 ? 1.0 : Math.max(0.55, 1.0 - (lag - 1) * 0.15);
     const [h, s, l] = voiceHSL(v);
 
     // Rhythm ring around the voice
@@ -487,13 +519,11 @@ function render() {
       drawRhythmRing(p.x, p.y, r, v.currentPattern, loopStart, [h, s, l]);
     }
 
-    // Leader halo: two faint rings
-    if (isLeader) {
-      ctx2d.strokeStyle = `hsla(${h}, ${s}%, ${l}%, 0.28)`;
+    // Repeat lock: a thin solid ring close to the circle, in voice's color.
+    if (v.repeatLocked) {
+      ctx2d.strokeStyle = `hsla(${h}, ${s}%, ${l}%, 0.55)`;
       ctx2d.lineWidth = 1.5;
-      drawCircleStroke(p.x, p.y, r + 11);
-      ctx2d.strokeStyle = `hsla(${h}, ${s}%, ${l}%, 0.14)`;
-      drawCircleStroke(p.x, p.y, r + 17);
+      drawCircleStroke(p.x, p.y, r + 5);
     }
 
     // Hover ring
@@ -505,16 +535,16 @@ function render() {
 
     // The circle itself
     if (v.muted) {
-      ctx2d.strokeStyle = voiceColor(v, dimAlpha);
+      ctx2d.strokeStyle = voiceColor(v);
       ctx2d.lineWidth = 2;
       drawCircleStroke(p.x, p.y, r + flash);
     } else {
-      ctx2d.fillStyle = voiceColor(v, dimAlpha);
+      ctx2d.fillStyle = voiceColor(v);
       drawCircle(p.x, p.y, r + flash);
     }
 
     // Pattern number
-    ctx2d.fillStyle = v.muted ? voiceColor(v, dimAlpha) : `rgba(255, 255, 255, ${dimAlpha})`;
+    ctx2d.fillStyle = v.muted ? voiceColor(v) : '#fff';
     ctx2d.font = 'bold 12px system-ui, sans-serif';
     ctx2d.textAlign = 'center';
     ctx2d.textBaseline = 'middle';
@@ -531,11 +561,11 @@ function render() {
     ctx2d.fillText(patterns ? 'click anywhere to begin' : 'loading…', cx, cy + 80);
   }
 
-  if (started && endingMode && voices.every(v => v.atEnd)) {
+  if (started && endingMode && voices.length > 0 && voices.every(v => v.atEnd)) {
     ctx2d.fillStyle = '#888';
     ctx2d.font = '12px system-ui, sans-serif';
     ctx2d.textAlign = 'center';
-    ctx2d.fillText('all voices on figure 53 — mute them one by one to end', cx, h - 24);
+    ctx2d.fillText('all voices on the final figure — mute them one by one to end', cx, h - 24);
   }
 
   requestAnimationFrame(render);
