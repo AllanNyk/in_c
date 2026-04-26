@@ -79,6 +79,7 @@ const ostinato = {
   gain: 0.35,
   muted: false,
   hidden: false,                       // visual-only hide; audio keeps playing
+  dismissed: false,                    // permanent removal during the dismantling end
   midi: OSTINATO_PITCH_DEFAULT,
   lastOnsetTime: -1,
   setGain(g) {
@@ -95,6 +96,11 @@ const ostinato = {
   },
   toggleMute() { this.setMuted(!this.muted); },
   toggleHidden() { this.hidden = !this.hidden; },
+  dismiss() {
+    if (this.dismissed) return;
+    this.setMuted(true);
+    this.dismissed = true;
+  },
   shiftPitch(direction) {
     const next = this.midi + direction * OSTINATO_PITCH_STEP;
     if (next < OSTINATO_PITCH_MIN || next > OSTINATO_PITCH_MAX) return;
@@ -118,6 +124,9 @@ const randomBtn      = document.getElementById('random-btn');
 const helpBtn        = document.getElementById('help-btn');
 const helpModal      = document.getElementById('help-modal');
 const helpClose      = helpModal.querySelector('.help-close');
+const aboutBtn       = document.getElementById('about-btn');
+const aboutModal     = document.getElementById('about-modal');
+const aboutClose     = aboutModal.querySelector('.about-close');
 
 // Onboarding state
 let everHovered = false;
@@ -163,6 +172,13 @@ helpModal.addEventListener('click', (e) => {
   if (e.target === helpModal) setHelpOpen(false);
 });
 
+function setAboutOpen(open) { aboutModal.hidden = !open; }
+aboutBtn.addEventListener('click', () => setAboutOpen(aboutModal.hidden));
+aboutClose.addEventListener('click', () => setAboutOpen(false));
+aboutModal.addEventListener('click', (e) => {
+  if (e.target === aboutModal) setAboutOpen(false);
+});
+
 randomBtn.addEventListener('click', () => randomizeAllFigures());
 
 // ---- Geometry / hit testing ----------------------------------------------
@@ -178,15 +194,18 @@ function voiceRadius(v) { return 22 + v.gain * 8; }
 
 function findHover(x, y) {
   for (let i = 0; i < voices.length; i++) {
+    if (voices[i].dismissed) continue;
     const p = voicePosition(i, voices.length);
     const r = voiceRadius(voices[i]);
     const dx = x - p.x, dy = y - p.y;
     if (dx * dx + dy * dy <= (r + 4) * (r + 4)) return { kind: 'voice', idx: i };
   }
-  const cx = canvas.width / 2, cy = canvas.height / 2;
-  const dx = x - cx, dy = y - cy;
-  if (dx * dx + dy * dy <= (OSTINATO_RADIUS + 6) * (OSTINATO_RADIUS + 6)) {
-    return { kind: 'ostinato' };
+  if (!ostinato.dismissed) {
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const dx = x - cx, dy = y - cy;
+    if (dx * dx + dy * dy <= (OSTINATO_RADIUS + 6) * (OSTINATO_RADIUS + 6)) {
+      return { kind: 'ostinato' };
+    }
   }
   return null;
 }
@@ -235,6 +254,18 @@ canvas.addEventListener('mousedown', async (e) => {
   }
 
   const hit = findHover(e.clientX, e.clientY);
+
+  // Dismantling phase: every left-click dismisses the targeted part for good.
+  if (endingMode && e.button === 0) {
+    if (hit && hit.kind === 'voice') {
+      voices[hit.idx].dismiss();
+      return;
+    }
+    if (hit && hit.kind === 'ostinato') {
+      ostinato.dismiss();
+      return;
+    }
+  }
 
   if (hit && hit.kind === 'voice') {
     const v = voices[hit.idx];
@@ -291,8 +322,11 @@ canvas.addEventListener('wheel', (e) => {
 
 window.addEventListener('keydown', (e) => {
   if (e.key === '?') { e.preventDefault(); setHelpOpen(helpModal.hidden); return; }
-  if (e.key === 'Escape' && !helpModal.hidden) { setHelpOpen(false); return; }
-  if (!helpModal.hidden) return; // swallow game-control keys while help is open
+  if (e.key === 'Escape') {
+    if (!aboutModal.hidden) { setAboutOpen(false); return; }
+    if (!helpModal.hidden) { setHelpOpen(false); return; }
+  }
+  if (!helpModal.hidden || !aboutModal.hidden) return; // swallow game-control keys while a modal is open
   if (e.key === 'm' || e.key === 'M') {
     const target = hoveredTarget();
     if (target) target.toggleMute();
@@ -401,6 +435,7 @@ function checkAutoAdvance() {
   if (voices.length === 0) return;
   const now = audio.currentTime;
   for (const v of voices) {
+    if (v.dismissed) continue;
     if (v.repeatLocked) continue;
     if (v.atEnd) continue;
     if (v.loopCount < 1) continue; // always play each figure through at least once
@@ -420,16 +455,19 @@ setInterval(() => {
   const horizon = audio.currentTime + SCHEDULER_LOOKAHEAD;
 
   while (nextOstinatoTime < horizon) {
-    audio.scheduleNote(ostinato.channel, 'piano', ostinato.noteFilename, nextOstinatoTime, 1.0);
-    ostinato.lastOnsetTime = nextOstinatoTime;
-    recentOstinatoOnsets.push(nextOstinatoTime);
-    if (recentOstinatoOnsets.length > RIPPLE_BUFFER) recentOstinatoOnsets.shift();
+    if (!ostinato.dismissed) {
+      audio.scheduleNote(ostinato.channel, 'piano', ostinato.noteFilename, nextOstinatoTime, 1.0);
+      ostinato.lastOnsetTime = nextOstinatoTime;
+      recentOstinatoOnsets.push(nextOstinatoTime);
+      if (recentOstinatoOnsets.length > RIPPLE_BUFFER) recentOstinatoOnsets.shift();
+    }
     nextOstinatoTime += ostinatoInterval();
   }
 
   const tf = tempoFactor();
   for (let i = 0; i < voices.length; i++) {
     const v = voices[i];
+    if (v.dismissed) continue;
     const newOnsets = v.scheduleUpTo(horizon, tf);
     if (v.muted) continue; // muted voices don't seed sparkles
     for (const t of newOnsets) {
@@ -669,10 +707,11 @@ function render() {
   // ---- Ostinato ----------------------------------------------------------
   const ostFlash = pulseFlash(now, ostinato.lastOnsetTime, 0.12, 7);
   const ostInk = `rgb(${inkValue}, ${inkValue}, ${inkValue})`;
+  const ostinatoVisible = !ostinato.hidden && !ostinato.dismissed;
 
   // Ostinato rhythm ring (uses parsed ostinato pattern: 8 evenly spaced eighths).
-  // Skip when the ostinato is hidden (audio still plays).
-  if (started && patterns && patterns.ostinato && !ostinato.hidden) {
+  // Skip when the ostinato is hidden (audio still plays) or dismissed.
+  if (started && patterns && patterns.ostinato && ostinatoVisible) {
     const pat = patterns.ostinato;
     const elapsed = now - ostinatoStartTime;
     const actualDuration = pat.duration * tempoFactor();
@@ -688,7 +727,7 @@ function render() {
     ctx2d.lineWidth = 2;
     drawCircleStroke(cx, cy, OSTINATO_RADIUS + 8);
   }
-  if (!ostinato.hidden) {
+  if (ostinatoVisible) {
     if (ostinato.muted) {
       ctx2d.strokeStyle = ostInk;
       ctx2d.lineWidth = 2;
@@ -718,11 +757,11 @@ function render() {
   // brighten in pulses tied to the cluster's most recent note onset.
   // When the piece is in its final unison (Conclude pressed and all on 53)
   // the strands glow brighter and shimmer with a small jitter.
-  const finalUnison = endingMode && voices.length > 0 && voices.every(v => v.atEnd);
+  const finalUnison = endingMode && voices.length > 0 && voices.every(v => v.dismissed || v.atEnd) && voices.some(v => !v.dismissed);
   if (voices.length > 1) {
     const clusters = new Map();
     for (let i = 0; i < voices.length; i++) {
-      if (voices[i].muted) continue;
+      if (voices[i].muted || voices[i].dismissed) continue;
       const k = voices[i].patternIdx;
       if (!clusters.has(k)) clusters.set(k, []);
       clusters.get(k).push(i);
@@ -778,6 +817,7 @@ function render() {
   // ---- Voices -----------------------------------------------------------
   for (let i = 0; i < voices.length; i++) {
     const v = voices[i];
+    if (v.dismissed) continue; // dismantled — silent and invisible
     const p = voicePosition(i, voices.length);
     const r = voiceRadius(v);
     const flash = pulseFlash(now, v.lastOnsetTime, 0.18, 6);
@@ -886,12 +926,25 @@ function render() {
     }
   }
 
-  if (started && endingMode && voices.length > 0 && voices.every(v => v.atEnd)) {
-    const hintCol = bgValue > 160 ? '#888' : '#ccc';
-    ctx2d.fillStyle = hintCol;
-    ctx2d.font = '24px system-ui, sans-serif';
-    ctx2d.textAlign = 'center';
-    ctx2d.fillText('all voices on the final figure — mute them one by one to end', cx, h - 76);
+  // Ending hints: instructional text or final thank-you.
+  if (started && endingMode && voices.length > 0) {
+    const allDismantled = ostinato.dismissed && voices.every(v => v.dismissed);
+    if (allDismantled) {
+      // Curtain text — replaces all instructional UI when the piece is gone.
+      ctx2d.textAlign = 'center';
+      ctx2d.fillStyle = bgValue > 160 ? '#444' : '#ddd';
+      ctx2d.font = '600 64px system-ui, sans-serif';
+      ctx2d.fillText('In C', cx, cy - 18);
+      ctx2d.fillStyle = bgValue > 160 ? '#888' : '#bbb';
+      ctx2d.font = '20px system-ui, sans-serif';
+      ctx2d.fillText('thank you for playing', cx, cy + 30);
+    } else if (voices.every(v => v.dismissed || v.atEnd)) {
+      const hintCol = bgValue > 160 ? '#888' : '#ccc';
+      ctx2d.fillStyle = hintCol;
+      ctx2d.font = '24px system-ui, sans-serif';
+      ctx2d.textAlign = 'center';
+      ctx2d.fillText('click each voice and the ostinato to dismantle the piece', cx, h - 76);
+    }
   }
 
   // ---- Topbar button visibility ------------------------------------------

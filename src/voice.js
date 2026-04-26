@@ -26,6 +26,7 @@ export class Voice {
     this.spawnTime = audio.currentTime;
     this.patternStartTime = audio.currentTime;
     this.repeatLocked = false;    // true = stay on current figure; ignore auto-advance
+    this.dismissed = false;       // true = dismantled at the end; gone from render + audio
 
     this._fitTransposition();
   }
@@ -79,6 +80,15 @@ export class Voice {
   toggleMute() { this.setMuted(!this.muted); }
 
   toggleRepeat() { this.repeatLocked = !this.repeatLocked; }
+
+  // Permanently remove this voice from the ensemble (used during the dismantling
+  // ending). Mutes (with fade) and flags as dismissed so render and scheduler
+  // both skip it. No re-undo.
+  dismiss() {
+    if (this.dismissed) return;
+    this.setMuted(true);
+    this.dismissed = true;
+  }
 
   // Move forward/backward in the score by `steps` patterns.
   // Resets loopCount and re-fits transposition.
