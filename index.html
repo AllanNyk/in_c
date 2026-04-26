@@ -6,17 +6,51 @@
   <title>In C</title>
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
       background: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: #444;
     }
-    canvas { display: block; cursor: crosshair; }
+    canvas { display: block; cursor: default; }
+    canvas.hover-target { cursor: pointer; }
+
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0;
+      padding: 10px 18px;
+      display: flex; align-items: center; gap: 24px;
+      font-size: 13px;
+      pointer-events: none; /* let canvas receive most events */
+      z-index: 10;
+    }
+    #topbar > * { pointer-events: auto; }
+    #topbar label { display: flex; align-items: center; gap: 8px; color: #888; }
+    #master-vol { width: 140px; }
+    #conclude-btn {
+      margin-left: auto;
+      padding: 6px 14px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font: inherit;
+      color: #555;
+      cursor: pointer;
+    }
+    #conclude-btn:hover:not(:disabled) { background: #f5f5f5; }
+    #conclude-btn:disabled { opacity: 0.4; cursor: default; }
+
+    #title {
+      font-size: 13px;
+      color: #aaa;
+      letter-spacing: 0.04em;
+    }
   </style>
 </head>
 <body>
+  <div id="topbar">
+    <div id="title">In C — Terry Riley</div>
+    <label>volume <input id="master-vol" type="range" min="0" max="1" step="0.01" value="0.85"></label>
+    <button id="conclude-btn">Conclude</button>
+  </div>
   <canvas id="canvas"></canvas>
   <script type="module" src="src/main.js"></script>
 </body>

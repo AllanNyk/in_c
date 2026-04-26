@@ -128,4 +128,50 @@ build_instrument "piano" "Grand Piano" 60 96 \
   95 "PP B6.flac" \
   96 "PP C7.flac"
 
+# Marimba — fully chromatic C2..C7. We use minor-third sources to limit pitch shift.
+# Filename pattern: marimba-yarn-ff-<note>.flac
+build_instrument "marimba" "Marimba" 48 84 \
+  48 "marimba-yarn-ff-c3.flac" \
+  51 "marimba-yarn-ff-d#3.flac" \
+  54 "marimba-yarn-ff-f#3.flac" \
+  57 "marimba-yarn-ff-a3.flac" \
+  60 "marimba-yarn-ff-c4.flac" \
+  63 "marimba-yarn-ff-d#4.flac" \
+  66 "marimba-yarn-ff-f#4.flac" \
+  69 "marimba-yarn-ff-a4.flac" \
+  72 "marimba-yarn-ff-c5.flac" \
+  75 "marimba-yarn-ff-d#5.flac" \
+  78 "marimba-yarn-ff-f#5.flac" \
+  81 "marimba-yarn-ff-a5.flac" \
+  84 "marimba-yarn-ff-c6.flac"
+
+# Celeste — sampled only at C, E, G# (major thirds). Use the "hard" variant.
+build_instrument "celeste" "Celeste" 60 96 \
+  60 "celeste-c4-hard.flac" \
+  64 "celeste-e4-hard.flac" \
+  68 "celeste-g#4-hard.flac" \
+  72 "celeste-c5-hard.flac" \
+  76 "celeste-e5-hard.flac" \
+  80 "celeste-g#5-hard.flac" \
+  84 "celeste-c6-hard.flac" \
+  88 "celeste-e6-hard.flac" \
+  92 "celeste-g#6-hard.flac" \
+  96 "celeste-c7-hard.flac"
+
+# Concert Harp — WAV files (ffmpeg auto-detects). Sampled at major 3rds.
+build_instrument "harp" "Harp" 48 84 \
+  48 "harp-c3.wav" \
+  51 "harp-d#3.wav" \
+  54 "harp-f#3.wav" \
+  57 "harp-a3.wav" \
+  60 "harp-c4.wav" \
+  63 "harp-d#4.wav" \
+  66 "harp-f#4.wav" \
+  69 "harp-a4.wav" \
+  72 "harp-c5.wav" \
+  75 "harp-d#5.wav" \
+  78 "harp-f#5.wav" \
+  81 "harp-a5.wav" \
+  84 "harp-c6.wav"
+
 echo "All done."

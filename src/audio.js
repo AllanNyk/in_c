@@ -1,10 +1,11 @@
-// audio.js — minimal Web Audio sample-playback engine for Phase 0.
+// audio.js — Web Audio sample-playback engine with per-voice channels.
 
 export class AudioEngine {
   constructor() {
     this.ctx = null;
     this.master = null;
-    this.buffers = new Map(); // 'instrument:note' -> AudioBuffer
+    this.buffers = new Map();      // 'instrument:note' -> AudioBuffer
+    this.loadingPromises = new Map(); // 'instrument:note' -> Promise
   }
 
   async init() {
@@ -12,38 +13,54 @@ export class AudioEngine {
     const AC = window.AudioContext || window.webkitAudioContext;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.9;
+    this.master.gain.value = 0.85;
     this.master.connect(this.ctx.destination);
+  }
+
+  setMasterGain(v) {
+    if (this.master) this.master.gain.value = Math.max(0, Math.min(1, v));
+  }
+
+  // A "channel" is a per-voice gain node feeding the master bus.
+  createChannel(initialGain = 0.7) {
+    const g = this.ctx.createGain();
+    g.gain.value = initialGain;
+    g.connect(this.master);
+    return g;
   }
 
   async loadSample(instrument, note) {
     const key = `${instrument}:${note}`;
-    if (this.buffers.has(key)) return;
-    const url = `assets/audio/${instrument}/${note}.mp3`;
-    const arr = await fetch(url).then(r => {
-      if (!r.ok) throw new Error(`failed to fetch ${url}`);
-      return r.arrayBuffer();
-    });
-    const buf = await this.ctx.decodeAudioData(arr);
-    this.buffers.set(key, buf);
+    if (this.buffers.has(key)) return this.buffers.get(key);
+    if (this.loadingPromises.has(key)) return this.loadingPromises.get(key);
+    const p = (async () => {
+      const url = `assets/audio/${instrument}/${note}.mp3`;
+      const arr = await fetch(url).then(r => {
+        if (!r.ok) throw new Error(`failed to fetch ${url}`);
+        return r.arrayBuffer();
+      });
+      const buf = await this.ctx.decodeAudioData(arr);
+      this.buffers.set(key, buf);
+      return buf;
+    })();
+    this.loadingPromises.set(key, p);
+    try { return await p; }
+    finally { this.loadingPromises.delete(key); }
   }
 
-  // Schedule a note to play at the given audio-context time.
-  // Returns the actual onset time so callers can sync visuals.
-  scheduleNote(instrument, note, when, gain = 1.0) {
+  // Schedule a buffered note. `channel` is optional; defaults to master.
+  scheduleNote(channel, instrument, note, when, gain = 1.0) {
     const key = `${instrument}:${note}`;
     const buf = this.buffers.get(key);
     if (!buf) return null;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
-    const g = this.ctx.createGain();
-    g.gain.value = gain;
-    src.connect(g).connect(this.master);
+    const noteGain = this.ctx.createGain();
+    noteGain.gain.value = gain;
+    src.connect(noteGain).connect(channel || this.master);
     src.start(when);
     return when;
   }
 
-  get currentTime() {
-    return this.ctx ? this.ctx.currentTime : 0;
-  }
+  get currentTime() { return this.ctx ? this.ctx.currentTime : 0; }
 }
