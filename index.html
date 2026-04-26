@@ -27,8 +27,8 @@
     #master-vol { width: 140px; }
     #tempo { width: 110px; }
     #tempo-value { display: inline-block; width: 28px; text-align: right; color: #aaa; }
-    #conclude-btn {
-      margin-left: auto;
+    .topbar-spacer { flex: 1; }
+    #conclude-btn, #random-btn {
       padding: 6px 14px;
       background: #fff;
       border: 1px solid #ccc;
@@ -37,13 +37,103 @@
       color: #555;
       cursor: pointer;
     }
-    #conclude-btn:hover:not(:disabled) { background: #f5f5f5; }
-    #conclude-btn:disabled { opacity: 0.4; cursor: default; }
+    #conclude-btn:hover:not(:disabled), #random-btn:hover:not(:disabled) { background: #f5f5f5; }
+    #conclude-btn:disabled, #random-btn:disabled { opacity: 0.4; cursor: default; }
+
+    #help-btn {
+      width: 26px; height: 26px;
+      padding: 0;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 50%;
+      font: inherit;
+      font-size: 13px;
+      color: #777;
+      cursor: pointer;
+      line-height: 1;
+    }
+    #help-btn:hover { background: #f5f5f5; color: #333; }
 
     #title {
       font-size: 13px;
       color: #aaa;
       letter-spacing: 0.04em;
+    }
+
+    #help-modal {
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    #help-modal[hidden] { display: none; }
+    #help-content {
+      background: #fff;
+      max-width: 520px;
+      width: calc(100% - 40px);
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      padding: 22px 28px 26px;
+      border-radius: 4px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+      font-size: 13px;
+      color: #333;
+      line-height: 1.55;
+    }
+    #help-content h2 {
+      margin: 0 0 4px;
+      font-size: 17px;
+      font-weight: 600;
+    }
+    #help-content .help-intro {
+      color: #777;
+      margin: 0 0 16px;
+    }
+    #help-content h3 {
+      margin: 14px 0 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    #help-content ul {
+      margin: 0; padding: 0; list-style: none;
+    }
+    #help-content li {
+      padding: 2px 0;
+      color: #444;
+    }
+    #help-content kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      margin: 0 1px;
+      background: #f0f0f0;
+      border: 1px solid #d0d0d0;
+      border-bottom-width: 2px;
+      border-radius: 3px;
+      font: inherit;
+      font-size: 11px;
+      color: #333;
+      min-width: 16px;
+      text-align: center;
+    }
+    #help-content .help-close {
+      float: right;
+      background: none;
+      border: none;
+      font: inherit;
+      font-size: 18px;
+      color: #999;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    #help-content .help-close:hover { color: #333; }
+    #help-content .esc-hint {
+      margin-top: 14px;
+      font-size: 11px;
+      color: #aaa;
     }
   </style>
 </head>
@@ -52,9 +142,56 @@
     <div id="title">In C — Terry Riley</div>
     <label>volume <input id="master-vol" type="range" min="0" max="1" step="0.01" value="0.85"></label>
     <label>tempo <input id="tempo" type="range" min="60" max="200" step="1" value="120"> <span id="tempo-value">120</span></label>
-    <button id="conclude-btn">Conclude</button>
+    <div class="topbar-spacer"></div>
+    <button id="random-btn" hidden>Random</button>
+    <button id="conclude-btn" hidden>Conclude</button>
+    <button id="help-btn" aria-label="Help" title="Help (?)">?</button>
   </div>
   <canvas id="canvas"></canvas>
+  <div id="help-modal" hidden>
+    <div id="help-content">
+      <button class="help-close" aria-label="Close">×</button>
+      <h2>In C — controls</h2>
+      <p class="help-intro">A browser realization of Terry Riley's <em>In C</em> (1964). You conduct an autonomous ensemble — spawn voices, shape their dynamics, push them through the 53 figures.</p>
+
+      <h3>Spawning &amp; ensemble</h3>
+      <ul>
+        <li><kbd>click</kbd> empty canvas — first click starts the ostinato + spawns voice 1; later clicks spawn the next voice from the roster (after the cooldown ring fills around the ostinato)</li>
+      </ul>
+
+      <h3>Per voice (hover a colored circle)</h3>
+      <ul>
+        <li><kbd>click</kbd> advance one figure · <kbd>ctrl</kbd>+click advance 5</li>
+        <li><kbd>right-click</kbd> reverse one figure · <kbd>ctrl</kbd>+right-click reverse 5</li>
+        <li><kbd>shift</kbd>+click — align every other voice to this voice's current figure</li>
+        <li><kbd>M</kbd> mute · <kbd>R</kbd> lock current figure (auto-advance off)</li>
+        <li><kbd>scroll</kbd> per-voice volume</li>
+        <li><kbd>←</kbd> <kbd>→</kbd> swap to previous / next instrument in the roster</li>
+      </ul>
+
+      <h3>Ostinato (hover the central circle)</h3>
+      <ul>
+        <li><kbd>click</kbd> shift pitch up · <kbd>right-click</kbd> shift pitch down (C4–C6)</li>
+        <li><kbd>M</kbd> mute · <kbd>scroll</kbd> volume · <kbd>H</kbd> hide visually (audio keeps playing)</li>
+      </ul>
+
+      <h3>Global</h3>
+      <ul>
+        <li>Top bar: master <kbd>volume</kbd> · <kbd>tempo</kbd> (60–200 BPM) · <kbd>Conclude</kbd> ending mode</li>
+        <li><kbd>R</kbd> when not hovering — reroll all unlocked voices to random figures (unlocked once all 11 voices are spawned)</li>
+        <li><kbd>?</kbd> toggle this help panel</li>
+      </ul>
+
+      <h3>Visual feedback</h3>
+      <ul>
+        <li>Background fades white→dark as the ensemble spreads across many figures</li>
+        <li>Gold strands link voices that share a figure (unison)</li>
+        <li>Colored sparkles flash where notes from different voices coincide in time</li>
+      </ul>
+
+      <p class="esc-hint">Press <kbd>Esc</kbd> or click outside to close.</p>
+    </div>
+  </div>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

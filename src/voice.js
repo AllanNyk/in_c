@@ -68,7 +68,12 @@ export class Voice {
 
   setMuted(m) {
     this.muted = m;
-    this.channel.gain.value = this.muted ? 0 : this.gain;
+    if (!this.channel) return;
+    const target = this.muted ? 0 : this.gain;
+    const t = this.audio.currentTime;
+    // Exponential approach to target — smooth ~150ms fade, click-free.
+    this.channel.gain.cancelScheduledValues(t);
+    this.channel.gain.setTargetAtTime(target, t, 0.05);
   }
 
   toggleMute() { this.setMuted(!this.muted); }
@@ -104,7 +109,10 @@ export class Voice {
   // Schedule notes from this voice's current pattern up to the audio horizon.
   // tempoFactor scales the score's notional 120-BPM seconds to real seconds
   // (e.g. 0.5 at 240 BPM, 2.0 at 60 BPM).
+  // Returns an array of newly-scheduled main-note onset times, so the caller
+  // can build a global onset history (used for cross-voice sparkle detection).
   scheduleUpTo(horizon, tempoFactor = 1) {
+    const newOnsets = [];
     while (this.nextLoopStart < horizon) {
       const pat = this.currentPattern;
       if (!pat) break;
@@ -115,18 +123,19 @@ export class Voice {
         const midi = n.midi + this.transposition;
         const file = midiToFilename(midi);
         const noteGain = n.grace ? 0.55 : 1.0;
-        // Sustained instruments cut at the note's written end with a short
-        // release. Percussive instruments play the full sample (their
-        // recorded decay is the intended sound).
         const dur = this.sustained && n.duration != null
           ? n.duration * tempoFactor
           : null;
         this.audio.scheduleNote(this.channel, this.instrument, file, t, noteGain, dur);
-        if (!n.grace && t > this.lastOnsetTime) this.lastOnsetTime = t;
+        if (!n.grace) {
+          if (t > this.lastOnsetTime) this.lastOnsetTime = t;
+          newOnsets.push(t);
+        }
       }
       this.nextLoopStart += pat.duration * tempoFactor;
       this.loopCount++;
     }
+    return newOnsets;
   }
 
   // Preload all chromatic samples we might need across the 53 patterns,

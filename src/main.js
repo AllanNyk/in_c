@@ -33,6 +33,12 @@ const DOT_DECAY      = 0.35; // seconds for a played dot to fade back
 const DOT_BASE_ALPHA = 0.18;
 const DOT_FLASH_ALPHA = 0.7;
 
+// Phase 3 visual params
+const SPARKLE_WINDOW = 0.05;  // seconds — onset coincidence window across voices
+const SPARKLE_LIFE   = 0.35;  // seconds — sparkle fade duration
+const SPARKLE_HISTORY = 1.5;  // seconds — how long onsets stay in pair-check pool
+const BG_DARK_RANGE  = 195;   // bg gradient: 255 (white, unison) → 60 (dark grey, fully spread)
+
 // ---- State ----------------------------------------------------------------
 
 const audio = new AudioEngine();
@@ -51,6 +57,16 @@ let nextOstinatoTime = 0;
 let ostinatoStartTime = 0;
 const recentOstinatoOnsets = [];
 
+// Sparkles for polyrhythmic alignment moments between voices on different figures.
+const sparkles = [];                   // { x, y, birth }
+const recentSparkleKeys = new Map();   // key -> birth time, for dedup
+const recentVoiceOnsets = [];          // { time, voiceIdx, patternIdx } sliding window
+
+// Display-side spread, lerped toward the live spreadFactor each frame so the
+// background color fades softly between states instead of snapping.
+let displayedSpread = 0;
+const SPREAD_LERP_RATE = 0.04; // per rAF frame; ~1.2s to reach 95% of target at 60fps
+
 // Ostinato pitch can be C6 (84, cap), C5 (72, default start), or C4 (60).
 // Left-click cycles up (toward the cap), right-click cycles down.
 const OSTINATO_PITCH_MAX = 84;
@@ -62,6 +78,7 @@ const ostinato = {
   channel: null,
   gain: 0.35,
   muted: false,
+  hidden: false,                       // visual-only hide; audio keeps playing
   midi: OSTINATO_PITCH_DEFAULT,
   lastOnsetTime: -1,
   setGain(g) {
@@ -70,9 +87,14 @@ const ostinato = {
   },
   setMuted(m) {
     this.muted = m;
-    if (this.channel) this.channel.gain.value = this.muted ? 0 : this.gain;
+    if (!this.channel) return;
+    const target = this.muted ? 0 : this.gain;
+    const t = audio.currentTime;
+    this.channel.gain.cancelScheduledValues(t);
+    this.channel.gain.setTargetAtTime(target, t, 0.05);
   },
   toggleMute() { this.setMuted(!this.muted); },
+  toggleHidden() { this.hidden = !this.hidden; },
   shiftPitch(direction) {
     const next = this.midi + direction * OSTINATO_PITCH_STEP;
     if (next < OSTINATO_PITCH_MIN || next > OSTINATO_PITCH_MAX) return;
@@ -92,6 +114,21 @@ const masterVolInput = document.getElementById('master-vol');
 const tempoInput     = document.getElementById('tempo');
 const tempoValueEl   = document.getElementById('tempo-value');
 const concludeBtn    = document.getElementById('conclude-btn');
+const randomBtn      = document.getElementById('random-btn');
+const helpBtn        = document.getElementById('help-btn');
+const helpModal      = document.getElementById('help-modal');
+const helpClose      = helpModal.querySelector('.help-close');
+
+// Onboarding state
+let everHovered = false;
+let everPressedRandomize = false;
+
+// Transient one-line message, used to give feedback for actions that silently
+// failed (e.g. click-to-spawn during cooldown). Cleared automatically by render.
+let transientMessage = null; // { text, birth, life }
+function transient(text, life = 1.6) {
+  transientMessage = { text, birth: audio.currentTime, life };
+}
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -118,6 +155,15 @@ concludeBtn.addEventListener('click', () => {
   endingMode = true;
   concludeBtn.disabled = true;
 });
+
+function setHelpOpen(open) { helpModal.hidden = !open; }
+helpBtn.addEventListener('click', () => setHelpOpen(helpModal.hidden));
+helpClose.addEventListener('click', () => setHelpOpen(false));
+helpModal.addEventListener('click', (e) => {
+  if (e.target === helpModal) setHelpOpen(false);
+});
+
+randomBtn.addEventListener('click', () => randomizeAllFigures());
 
 // ---- Geometry / hit testing ----------------------------------------------
 
@@ -159,6 +205,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('mousemove', e => {
   hovered = findHover(e.clientX, e.clientY);
   canvas.classList.toggle('hover-target', hovered !== null);
+  if (hovered) everHovered = true;
 });
 canvas.addEventListener('mouseleave', () => {
   hovered = null;
@@ -190,8 +237,22 @@ canvas.addEventListener('mousedown', async (e) => {
   const hit = findHover(e.clientX, e.clientY);
 
   if (hit && hit.kind === 'voice') {
-    if (e.button === 0) voices[hit.idx].advance(1);
-    else if (e.button === 2) voices[hit.idx].advance(-1);
+    const v = voices[hit.idx];
+    const big = e.ctrlKey || e.metaKey;
+    if (e.button === 0) {
+      if (e.shiftKey) {
+        // Align every other voice to this voice's current figure.
+        const target = v.patternIdx;
+        for (const other of voices) {
+          if (other === v) continue;
+          other.advance(target - other.patternIdx);
+        }
+      } else {
+        v.advance(big ? 5 : 1);
+      }
+    } else if (e.button === 2) {
+      v.advance(big ? -5 : -1);
+    }
     return;
   }
   if (hit && hit.kind === 'ostinato') {
@@ -201,10 +262,21 @@ canvas.addEventListener('mousedown', async (e) => {
     return;
   }
 
-  if (endingMode) return;
-  if (voices.length >= ROSTER.length) return;
+  if (endingMode) {
+    transient('ending mode — spawning disabled');
+    return;
+  }
+  if (voices.length >= ROSTER.length) {
+    transient('all 11 voices in — press R to randomize');
+    return;
+  }
   const now = audio.currentTime;
-  if (now - lastSpawnTime < SPAWN_COOLDOWN) return;
+  const elapsed = now - lastSpawnTime;
+  if (elapsed < SPAWN_COOLDOWN) {
+    const remaining = Math.max(1, Math.ceil(SPAWN_COOLDOWN - elapsed));
+    transient(`wait — next voice ready in ${remaining}s`);
+    return;
+  }
   await spawnNextVoice();
   lastSpawnTime = now;
 });
@@ -218,25 +290,56 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 window.addEventListener('keydown', (e) => {
+  if (e.key === '?') { e.preventDefault(); setHelpOpen(helpModal.hidden); return; }
+  if (e.key === 'Escape' && !helpModal.hidden) { setHelpOpen(false); return; }
+  if (!helpModal.hidden) return; // swallow game-control keys while help is open
   if (e.key === 'm' || e.key === 'M') {
     const target = hoveredTarget();
     if (target) target.toggleMute();
     return;
   }
-  // Voice-only keys below.
-  if (!hovered || hovered.kind !== 'voice') return;
-  if (e.key === 'r' || e.key === 'R') {
-    voices[hovered.idx].toggleRepeat();
+  // Ostinato-only keys.
+  if (hovered && hovered.kind === 'ostinato') {
+    if (e.key === 'h' || e.key === 'H') {
+      ostinato.toggleHidden();
+    }
     return;
   }
-  if (e.key === 'ArrowLeft') {
-    e.preventDefault();
-    cycleVoiceInstrument(voices[hovered.idx], -1);
-  } else if (e.key === 'ArrowRight') {
-    e.preventDefault();
-    cycleVoiceInstrument(voices[hovered.idx], +1);
+  // Voice-only keys.
+  if (hovered && hovered.kind === 'voice') {
+    if (e.key === 'r' || e.key === 'R') {
+      voices[hovered.idx].toggleRepeat();
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      cycleVoiceInstrument(voices[hovered.idx], -1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      cycleVoiceInstrument(voices[hovered.idx], +1);
+    }
+    return;
+  }
+  // Global keys (no hover target).
+  if (e.key === 'r' || e.key === 'R') {
+    if (voices.length >= ROSTER.length && patterns) {
+      randomizeAllFigures();
+    }
   }
 });
+
+// Reroll every (unlocked) voice to a random figure. Available only once the
+// full roster has been spawned — gives the player a "reshuffle the texture"
+// gesture for the late-game.
+function randomizeAllFigures() {
+  const total = patterns.figures.length;
+  for (const v of voices) {
+    if (v.repeatLocked) continue;
+    const target = Math.floor(Math.random() * total);
+    v.advance(target - v.patternIdx);
+  }
+  everPressedRandomize = true;
+}
 
 function cycleVoiceInstrument(voice, direction) {
   const idx = ROSTER.findIndex(r => r.instrument === voice.instrument);
@@ -269,6 +372,27 @@ async function spawnNextVoice() {
   voice.nextLoopStart = alignToOstinatoGrid(audio.currentTime + 0.3);
   voices.push(voice);
   voice.preloadSamples().catch(err => console.error('preload failed:', err));
+  showVoiceSpawnHint(voices.length);
+}
+
+// Per-voice intro hints — fired as a transient when each new voice spawns,
+// stepping the player through gestures, then visualization, then context
+// about the piece itself, finally the ending goal.
+const VOICE_SPAWN_HINTS = {
+  2:  'each voice auto-advances through the 53 figures every ~20 seconds on its own',
+  3:  'ctrl + click a voice to jump 5 figures forward · ctrl + right-click to go back 5',
+  4:  'shift + click a voice to align every other voice to its current figure',
+  5:  'press R while hovering a voice to lock it on its current figure',
+  6:  'press ← or → while hovering a voice to swap its instrument',
+  7:  'gold strands link voices on the same figure · colored sparkles mark cross-rhythmic coincidences between different figures',
+  8:  '"In C" was composed by Terry Riley in 1964 — a foundational work of musical minimalism',
+  9:  'the piece is 53 short melodic figures, performed in sequence by any number of musicians',
+  10: 'each performer chooses how many times to repeat a figure before advancing — every performance is unique',
+  11: 'get all 11 instruments to figure 53 and then end the piece at your leisure',
+};
+function showVoiceSpawnHint(count) {
+  const text = VOICE_SPAWN_HINTS[count];
+  if (text) transient(text, 9);
 }
 
 // ---- Auto-advance ---------------------------------------------------------
@@ -304,9 +428,67 @@ setInterval(() => {
   }
 
   const tf = tempoFactor();
-  for (const v of voices) v.scheduleUpTo(horizon, tf);
+  for (let i = 0; i < voices.length; i++) {
+    const v = voices[i];
+    const newOnsets = v.scheduleUpTo(horizon, tf);
+    if (v.muted) continue; // muted voices don't seed sparkles
+    for (const t of newOnsets) {
+      recentVoiceOnsets.push({ time: t, voiceIdx: i, patternIdx: v.patternIdx });
+    }
+  }
+  // Prune old onsets and sparkle dedup keys.
+  const cutoff = audio.currentTime - SPARKLE_HISTORY;
+  while (recentVoiceOnsets.length > 0 && recentVoiceOnsets[0].time < cutoff) {
+    recentVoiceOnsets.shift();
+  }
+  for (const [k, t] of recentSparkleKeys) {
+    if (t < cutoff) recentSparkleKeys.delete(k);
+  }
+  detectPolyrhythmicSparkles();
   checkAutoAdvance();
 }, 25);
+
+// Detect onsets from voices on DIFFERENT figures that fall within SPARKLE_WINDOW
+// of each other. Each unique pair-and-time spawns one sparkle at the midpoint
+// of the two voices' positions. Direct visualization of Riley's "polyrhythmic
+// combinations that spontaneously arise between patterns".
+function detectPolyrhythmicSparkles() {
+  for (let i = 0; i < recentVoiceOnsets.length; i++) {
+    const a = recentVoiceOnsets[i];
+    for (let j = i + 1; j < recentVoiceOnsets.length; j++) {
+      const b = recentVoiceOnsets[j];
+      if (Math.abs(a.time - b.time) > SPARKLE_WINDOW) continue;
+      if (a.voiceIdx === b.voiceIdx) continue;
+      if (a.patternIdx === b.patternIdx) continue;
+      const lo = Math.min(a.voiceIdx, b.voiceIdx);
+      const hi = Math.max(a.voiceIdx, b.voiceIdx);
+      const onsetTime = Math.max(a.time, b.time);
+      const key = `${lo}_${hi}_${onsetTime.toFixed(3)}`;
+      if (recentSparkleKeys.has(key)) continue;
+      recentSparkleKeys.set(key, onsetTime);
+      const pa = voicePosition(a.voiceIdx, voices.length);
+      const pb = voicePosition(b.voiceIdx, voices.length);
+      sparkles.push({
+        x: (pa.x + pb.x) / 2,
+        y: (pa.y + pb.y) / 2,
+        birth: onsetTime,
+        hue: mixHue(voices[a.voiceIdx].color, voices[b.voiceIdx].color),
+      });
+    }
+  }
+}
+
+// Average two HSL hues correctly around the circle (so 350 + 30 mixes to 10,
+// not to 190). Each sparkle inherits the mid-hue between its two voices'
+// colors, so visually you can read which two voices just kissed.
+function mixHue(h1, h2) {
+  let a = h1, b = h2;
+  if (Math.abs(a - b) > 180) {
+    if (a < b) a += 360;
+    else b += 360;
+  }
+  return ((a + b) / 2 + 360) % 360;
+}
 
 // ---- Render ---------------------------------------------------------------
 
@@ -362,9 +544,10 @@ function drawRhythmRing(cx, cy, baseRadius, pattern, loopStartTime, hslBase) {
   }
 }
 
-function drawHoverPanel(sx, sy, label, sublabel, gain, muted, fillColor, extraHint) {
-  const w = 150;
-  const h = extraHint ? 78 : 64;
+function drawHoverPanel(sx, sy, label, sublabel, gain, muted, fillColor, extraHints) {
+  const hints = Array.isArray(extraHints) ? extraHints : (extraHints ? [extraHints] : []);
+  const w = 168;
+  const h = 64 + hints.length * 12;
   ctx2d.fillStyle = 'rgba(255, 255, 255, 0.96)';
   ctx2d.strokeStyle = '#d0d0d0';
   ctx2d.lineWidth = 1;
@@ -379,7 +562,7 @@ function drawHoverPanel(sx, sy, label, sublabel, gain, muted, fillColor, extraHi
   ctx2d.fillStyle = '#999';
   ctx2d.fillText(sublabel, sx + 10, sy + 22);
 
-  const barX = sx + 10, barY = sy + 40, barW = 130, barH = 5;
+  const barX = sx + 10, barY = sy + 40, barW = 148, barH = 5;
   ctx2d.fillStyle = '#eee';
   ctx2d.fillRect(barX, barY, barW, barH);
   ctx2d.fillStyle = muted ? '#bbb' : fillColor;
@@ -387,15 +570,17 @@ function drawHoverPanel(sx, sy, label, sublabel, gain, muted, fillColor, extraHi
 
   ctx2d.fillStyle = '#888';
   ctx2d.fillText(muted ? 'M unmute · R lock · scroll vol' : 'M mute · R lock · scroll vol', sx + 10, sy + 50);
-  if (extraHint) ctx2d.fillText(extraHint, sx + 10, sy + 62);
+  for (let i = 0; i < hints.length; i++) {
+    ctx2d.fillText(hints[i], sx + 10, sy + 62 + i * 12);
+  }
 }
 
 function drawVoicePanel(v, voiceIdx) {
   const p = voicePosition(voiceIdx, voices.length);
   const cx = canvas.width / 2;
   const onLeftHalf = p.x < cx;
-  const sx = onLeftHalf ? p.x + 40 : p.x - 170;
-  const sy = p.y - 38;
+  const sx = onLeftHalf ? p.x + 40 : p.x - 178;
+  const sy = p.y - 50;
   const total = v.figureCount;
   const sublabel = v.repeatLocked
     ? `figure ${v.patternIdx + 1}/${total} · locked`
@@ -405,14 +590,14 @@ function drawVoicePanel(v, voiceIdx) {
     v.instrument,
     sublabel,
     v.gain, v.muted, voiceColor(v),
-    '← → swap instrument',
+    ['← → swap instrument', 'click ±1 · ctrl+click ±5', 'shift+click: align all'],
   );
 }
 
 function drawOstinatoPanel() {
   const cx = canvas.width / 2, cy = canvas.height / 2;
-  const sx = cx + 50, sy = cy - 32;
-  const w = 150, h = 78;
+  const sx = cx + 50, sy = cy - 38;
+  const w = 158, h = 90;
 
   ctx2d.fillStyle = 'rgba(255, 255, 255, 0.96)';
   ctx2d.strokeStyle = '#d0d0d0';
@@ -426,26 +611,45 @@ function drawOstinatoPanel() {
   ctx2d.textBaseline = 'top';
   ctx2d.fillText('ostinato', sx + 10, sy + 8);
   ctx2d.fillStyle = '#999';
-  ctx2d.fillText(`${ostinato.noteLabel} · 8th-note pulse`, sx + 10, sy + 22);
+  const status = ostinato.hidden ? ' · hidden' : '';
+  ctx2d.fillText(`${ostinato.noteLabel} · 8th-note pulse${status}`, sx + 10, sy + 22);
 
-  const barX = sx + 10, barY = sy + 40, barW = 130, barH = 5;
+  const barX = sx + 10, barY = sy + 40, barW = 138, barH = 5;
   ctx2d.fillStyle = '#eee';
   ctx2d.fillRect(barX, barY, barW, barH);
   ctx2d.fillStyle = ostinato.muted ? '#bbb' : '#000';
   ctx2d.fillRect(barX, barY, barW * ostinato.gain, barH);
 
   ctx2d.fillStyle = '#888';
-  ctx2d.fillText(ostinato.muted ? 'M: unmute · scroll: vol' : 'M: mute · scroll: vol', sx + 10, sy + 50);
+  ctx2d.fillText(ostinato.muted ? 'M unmute · scroll vol' : 'M mute · scroll vol', sx + 10, sy + 50);
   ctx2d.fillText('L/R click: shift octave', sx + 10, sy + 62);
+  ctx2d.fillText(ostinato.hidden ? 'H: show' : 'H: hide visually', sx + 10, sy + 74);
 }
 
 function render() {
   const w = canvas.width, h = canvas.height;
-  ctx2d.fillStyle = '#fff';
-  ctx2d.fillRect(0, 0, w, h);
-
   const cx = w / 2, cy = h / 2;
   const now = started ? audio.currentTime : 0;
+
+  // ---- Background: white when in unison, gradually grey-black as ensemble spreads
+  let targetSpread = 0;
+  if (started && voices.length > 1) {
+    const distinctFigures = new Set();
+    for (const v of voices) {
+      if (v.muted) continue;
+      distinctFigures.add(v.patternIdx);
+    }
+    // Fixed palette: scale against the maximum possible distinct figures
+    // (=full roster size) so 2 voices on different figures is a slight tint,
+    // not full darkness. 11 voices on 11 different figures is full dark.
+    targetSpread = Math.max(0, (distinctFigures.size - 1) / (ROSTER.length - 1));
+  }
+  // Lerp displayed spread toward target so the bg color fades softly.
+  displayedSpread += (targetSpread - displayedSpread) * SPREAD_LERP_RATE;
+  const bgValue = Math.round(255 - displayedSpread * BG_DARK_RANGE);
+  const inkValue = 255 - bgValue; // contrast color for "neutral" elements (ostinato, ripples)
+  ctx2d.fillStyle = `rgb(${bgValue}, ${bgValue}, ${bgValue})`;
+  ctx2d.fillRect(0, 0, w, h);
 
   // ---- Background ripples (one per recent ostinato pulse) -----------------
   if (started && !ostinato.muted) {
@@ -454,8 +658,8 @@ function render() {
       const dt = now - t;
       if (dt < 0 || dt > RIPPLE_MAX_AGE) continue;
       const radius = dt * RIPPLE_SPEED;
-      const alpha = 0.05 * (1 - dt / RIPPLE_MAX_AGE);
-      ctx2d.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
+      const alpha = 0.06 * (1 - dt / RIPPLE_MAX_AGE);
+      ctx2d.strokeStyle = `rgba(${inkValue}, ${inkValue}, ${inkValue}, ${alpha})`;
       ctx2d.beginPath();
       ctx2d.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx2d.stroke();
@@ -464,18 +668,19 @@ function render() {
 
   // ---- Ostinato ----------------------------------------------------------
   const ostFlash = pulseFlash(now, ostinato.lastOnsetTime, 0.12, 7);
+  const ostInk = `rgb(${inkValue}, ${inkValue}, ${inkValue})`;
 
-  // Ostinato rhythm ring (uses parsed ostinato pattern: 8 evenly spaced eighths)
-  if (started && patterns && patterns.ostinato) {
+  // Ostinato rhythm ring (uses parsed ostinato pattern: 8 evenly spaced eighths).
+  // Skip when the ostinato is hidden (audio still plays).
+  if (started && patterns && patterns.ostinato && !ostinato.hidden) {
     const pat = patterns.ostinato;
-    // Current iteration start = last grid-aligned multiple of pat.duration (tempo-scaled).
-    // Since the ostinato grid kinks at tempo changes (we don't reset the start time),
-    // this is approximate during/right after a tempo change but resyncs quickly.
     const elapsed = now - ostinatoStartTime;
     const actualDuration = pat.duration * tempoFactor();
     const iter = elapsed >= 0 ? Math.floor(elapsed / actualDuration) : 0;
     const loopStart = ostinatoStartTime + iter * actualDuration;
-    drawRhythmRing(cx, cy, OSTINATO_RADIUS, pat, loopStart, [0, 0, 12]);
+    // Ring lightness inverts with bg so dots remain readable on dark spread bg.
+    const ringL = bgValue > 128 ? 12 : 88;
+    drawRhythmRing(cx, cy, OSTINATO_RADIUS, pat, loopStart, [0, 0, ringL]);
   }
 
   if (hovered && hovered.kind === 'ostinato') {
@@ -483,13 +688,15 @@ function render() {
     ctx2d.lineWidth = 2;
     drawCircleStroke(cx, cy, OSTINATO_RADIUS + 8);
   }
-  if (ostinato.muted) {
-    ctx2d.strokeStyle = '#000';
-    ctx2d.lineWidth = 2;
-    drawCircleStroke(cx, cy, OSTINATO_RADIUS + ostFlash);
-  } else {
-    ctx2d.fillStyle = '#000';
-    drawCircle(cx, cy, OSTINATO_RADIUS + ostFlash);
+  if (!ostinato.hidden) {
+    if (ostinato.muted) {
+      ctx2d.strokeStyle = ostInk;
+      ctx2d.lineWidth = 2;
+      drawCircleStroke(cx, cy, OSTINATO_RADIUS + ostFlash);
+    } else {
+      ctx2d.fillStyle = ostInk;
+      drawCircle(cx, cy, OSTINATO_RADIUS + ostFlash);
+    }
   }
 
   // Cooldown ring
@@ -509,6 +716,9 @@ function render() {
   // Group unmuted voices by current patternIdx. Any group of ≥2 gets thin
   // glowing strands drawn between every pair of voice positions. Strands
   // brighten in pulses tied to the cluster's most recent note onset.
+  // When the piece is in its final unison (Conclude pressed and all on 53)
+  // the strands glow brighter and shimmer with a small jitter.
+  const finalUnison = endingMode && voices.length > 0 && voices.every(v => v.atEnd);
   if (voices.length > 1) {
     const clusters = new Map();
     for (let i = 0; i < voices.length; i++) {
@@ -526,22 +736,39 @@ function render() {
         }
       }
       const intensity = pulseFlash(now, clusterLastOnset, 0.45, 1) || 0;
-      const coreAlpha = 0.22 + intensity * 0.55;
-      const haloAlpha = 0.10 + intensity * 0.32;
+      let coreAlpha = 0.22 + intensity * 0.55;
+      let haloAlpha = 0.10 + intensity * 0.32;
+      let coreWidth = 1;
+      let haloWidth = 6;
+      if (finalUnison) {
+        coreAlpha = 0.55 + intensity * 0.40;
+        haloAlpha = 0.30 + intensity * 0.40;
+        coreWidth = 1.5;
+        haloWidth = 9;
+      }
       for (let a = 0; a < indices.length; a++) {
         const pa = voicePosition(indices[a], voices.length);
         for (let b = a + 1; b < indices.length; b++) {
           const pb = voicePosition(indices[b], voices.length);
+          let x1 = pa.x, y1 = pa.y, x2 = pb.x, y2 = pb.y;
+          if (finalUnison) {
+            // Tiny shimmer per strand — high frequency, ~1px amplitude. Each
+            // strand uses a different phase so the whole web "breathes".
+            const phase = indices[a] * 7 + indices[b] * 11;
+            const jx = Math.sin(now * 16 + phase) * 1.1;
+            const jy = Math.cos(now * 19 + phase * 1.3) * 1.1;
+            x1 += jx; y1 += jy; x2 -= jx; y2 -= jy;
+          }
           // Soft halo
           ctx2d.strokeStyle = `rgba(255, 228, 160, ${haloAlpha})`;
-          ctx2d.lineWidth = 6;
+          ctx2d.lineWidth = haloWidth;
           ctx2d.beginPath();
-          ctx2d.moveTo(pa.x, pa.y);
-          ctx2d.lineTo(pb.x, pb.y);
+          ctx2d.moveTo(x1, y1);
+          ctx2d.lineTo(x2, y2);
           ctx2d.stroke();
           // Bright core
           ctx2d.strokeStyle = `rgba(255, 232, 170, ${coreAlpha})`;
-          ctx2d.lineWidth = 1;
+          ctx2d.lineWidth = coreWidth;
           ctx2d.stroke();
         }
       }
@@ -594,24 +821,102 @@ function render() {
     ctx2d.fillText(String(v.patternIdx + 1), p.x, p.y);
   }
 
+  // ---- Polyrhythmic sparkles -------------------------------------------
+  for (let i = sparkles.length - 1; i >= 0; i--) {
+    const s = sparkles[i];
+    const dt = now - s.birth;
+    if (dt < 0) continue; // not visible yet
+    if (dt > SPARKLE_LIFE) {
+      sparkles.splice(i, 1);
+      continue;
+    }
+    const t = 1 - dt / SPARKLE_LIFE;
+    const radius = 2 + t * 5;
+    const alpha = t;
+    const hue = s.hue ?? 250;
+    // light halo
+    ctx2d.fillStyle = `hsla(${hue}, 70%, 78%, ${alpha * 0.30})`;
+    ctx2d.beginPath();
+    ctx2d.arc(s.x, s.y, radius * 2.6, 0, Math.PI * 2);
+    ctx2d.fill();
+    // mid aura
+    ctx2d.fillStyle = `hsla(${hue}, 80%, 52%, ${alpha * 0.55})`;
+    ctx2d.beginPath();
+    ctx2d.arc(s.x, s.y, radius * 1.5, 0, Math.PI * 2);
+    ctx2d.fill();
+    // saturated dark core
+    ctx2d.fillStyle = `hsla(${hue}, 85%, 32%, ${alpha})`;
+    ctx2d.beginPath();
+    ctx2d.arc(s.x, s.y, radius, 0, Math.PI * 2);
+    ctx2d.fill();
+  }
+
   if (hovered && hovered.kind === 'voice') drawVoicePanel(voices[hovered.idx], hovered.idx);
   else if (hovered && hovered.kind === 'ostinato') drawOstinatoPanel();
 
+  // ---- Contextual onboarding hint / transient message -------------------
   if (!started) {
     ctx2d.fillStyle = '#aaa';
     ctx2d.font = '14px system-ui, sans-serif';
     ctx2d.textAlign = 'center';
     ctx2d.fillText(patterns ? 'click anywhere to begin' : 'loading…', cx, cy + 80);
+  } else {
+    let hintText = null;
+    let hintAlpha = 0.85;
+    if (transientMessage) {
+      const dt = now - transientMessage.birth;
+      if (dt > transientMessage.life) {
+        transientMessage = null;
+      } else {
+        hintText = transientMessage.text;
+        // Hold full alpha for first half, fade out for second half
+        const t = dt / transientMessage.life;
+        hintAlpha = t < 0.5 ? 1.0 : Math.max(0, 1 - (t - 0.5) * 2);
+      }
+    }
+    if (!hintText) hintText = currentHint();
+    if (hintText) {
+      const hintCol = bgValue > 160
+        ? `rgba(120, 120, 120, ${hintAlpha})`
+        : `rgba(220, 220, 220, ${hintAlpha})`;
+      ctx2d.fillStyle = hintCol;
+      ctx2d.font = '12px system-ui, sans-serif';
+      ctx2d.textAlign = 'center';
+      ctx2d.fillText(hintText, cx, h - 26);
+    }
   }
 
   if (started && endingMode && voices.length > 0 && voices.every(v => v.atEnd)) {
-    ctx2d.fillStyle = '#888';
+    const hintCol = bgValue > 160 ? '#888' : '#ccc';
+    ctx2d.fillStyle = hintCol;
     ctx2d.font = '12px system-ui, sans-serif';
     ctx2d.textAlign = 'center';
-    ctx2d.fillText('all voices on the final figure — mute them one by one to end', cx, h - 24);
+    ctx2d.fillText('all voices on the final figure — mute them one by one to end', cx, h - 44);
   }
 
+  // ---- Topbar button visibility ------------------------------------------
+  // Random: show once the full roster is in. Conclude: show once everyone
+  // has reached the final figure (or once we've already entered ending mode).
+  const fullRoster = voices.length >= ROSTER.length;
+  const allAtEnd = fullRoster && voices.every(v => v.atEnd);
+  if (randomBtn.hidden === fullRoster) randomBtn.hidden = !fullRoster;
+  const concludeShown = allAtEnd || endingMode;
+  if (concludeBtn.hidden === concludeShown) concludeBtn.hidden = !concludeShown;
+
   requestAnimationFrame(render);
+}
+
+// Walks the player through discovery one prompt at a time. Each hint is shown
+// only while its condition is true; doing the action makes it false.
+function currentHint() {
+  if (voices.length < 2) return 'click empty space to add the next instrument · press ? for help';
+  if (!everHovered) return 'hover any voice or the ostinato to see its controls · press ? for help';
+  if (voices.length >= ROSTER.length) {
+    const allAtEnd = voices.every(v => v.atEnd);
+    if (!allAtEnd) return 'bring every voice to figure 53 — Conclude unlocks when they all arrive';
+    if (allAtEnd && !endingMode) return 'all 11 on figure 53 — press Conclude to begin the ending';
+  }
+  return null;
 }
 
 requestAnimationFrame(render);
