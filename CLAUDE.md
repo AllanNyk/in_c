@@ -55,30 +55,45 @@ unused_instruments.md      — instruments built but not currently in the roster
 ## Conductor controls (current)
 
 Per-voice (hover a voice circle):
-- **left-click**  advance one figure (next loop iteration uses the new figure)
-- **right-click** reverse one figure
-- **scroll wheel** adjust per-voice volume
-- **M** mute / unmute
-- **R** repeat-lock (voice stops auto-advancing; manual advance still works)
-- **← / →** swap to previous / next instrument in the roster (wraps)
+- **left-click** — advance one figure (next loop iteration uses the new figure)
+- **right-click** — reverse one figure
+- **ctrl + click** — advance / reverse by 5 figures
+- **shift + left-click** — align every other voice to this voice's current figure
+- **scroll wheel** — adjust per-voice volume
+- **M** — mute / unmute (~150ms fade, click-free)
+- **R** — repeat-lock (voice stops auto-advancing; manual advance still works)
+- **← / →** — swap to previous / next instrument in the roster (wraps)
 
 Per-ostinato (hover the central black circle):
-- **left-click**  shift pitch up one octave (cap C6)
-- **right-click** shift pitch down one octave (floor C4)
-- **scroll wheel** volume
-- **M** mute / unmute
+- **left-click** — shift pitch up one octave (cap C6)
+- **right-click** — shift pitch down one octave (floor C4)
+- **scroll wheel** — volume
+- **M** — mute / unmute
+- **H** — hide visually (audio keeps playing; hover area unchanged)
 - Default pitch C5; never advances figures (just holds the eighth-note pulse)
 
 Top bar:
-- **volume** master gain
-- **tempo** slider, 60–200 BPM (score is encoded at notional 120 BPM and scaled at scheduling time)
-- **Conclude** — ending mode: voices hurry to the final figure regardless of dwell;
-  once all are at the last figure, mute them one-by-one to end
+- **volume** — master gain
+- **tempo** — slider, 60–200 BPM (score is encoded at notional 120 BPM and scaled at scheduling time)
+- **Random** — visible only after all 11 voices spawned; rerolls every unlocked
+  voice to a random figure (same as global R-key)
+- **Conclude** — hidden until all 11 voices have reached the final figure;
+  triggers ending mode (voices race to the end if any aren't there yet, then
+  the player mutes them one-by-one to finish the piece)
+- **?** — opens the help modal listing all controls
+
+Global keys (no hover required):
+- **R** (when nothing is hovered) — randomize all unlocked voices' figures
+  (only effective once 11 voices are spawned)
+- **?** — toggle the help modal
+- **Esc** — close the help modal
 
 Click on empty canvas:
 - First click starts the engine + spawns voice 1 from the roster.
-- Subsequent clicks spawn the next roster voice, gated by a 20s cooldown
+- Subsequent clicks spawn the next roster voice, gated by a 20 s cooldown
   (a thin gray arc around the ostinato shows the cooldown progress).
+- If the click can't spawn (cooldown active, roster full, or in ending mode),
+  a transient feedback message appears at the bottom of the screen.
 
 ## Auto-advance rule
 
@@ -96,15 +111,46 @@ their own pace).
 
 ## Visual encoding
 
-- Ostinato (center): black circle, pulses on every eighth-note. Surrounded by an
-  8-dot rhythm ring (clock face) showing the active pulse.
-- Voice circles: arranged dynamically around the ostinato. Color = instrument hue
-  (saturation/brightness shifts cool→warm with figure progress 1→last).
-  Size scales with volume. Outline-only when muted. Thin in-color ring at r+5
-  when repeat-locked. Current figure number drawn inside.
-- Each voice has a **rhythm ring**: dots arranged at angles representing each
-  non-grace note's position in the loop. Dots brighten on play.
-- **Background ripples** expand from canvas center on every ostinato pulse.
+- **Ostinato (center)** — black circle (inverts to light grey on dark bg), pulses
+  on every eighth-note. Surrounded by an 8-dot rhythm ring (clock face) showing
+  the active pulse. Skipped entirely when `H`-hidden.
+- **Voice circles** — arranged dynamically around the ostinato. Color = instrument
+  hue (saturation/brightness shifts cool→warm with figure progress 1→last). Size
+  scales with volume. Outline-only when muted. Thin in-color ring at r+5 when
+  repeat-locked. Current figure number drawn inside.
+- **Voice rhythm rings** — small dots around each voice circle at angles representing
+  each non-grace note's position in the loop. Brighten on play.
+- **Background ripples** — faint expanding circles from canvas center on every
+  ostinato pulse (color inverts with bg darkness so they remain visible).
+- **Background gradient (spread)** — bg goes from white (all voices in unison) to
+  near-black (all voices on different figures), scaled against the full roster
+  size so 2 voices on different figures only nudges the bg slightly grey. Lerps
+  smoothly toward the target each frame for a soft fade between states.
+- **Unison strands** — gold/cream lines link voices that share a figure, with a
+  soft halo + bright core. Brighten in pulses on cluster note onsets. When in
+  ending mode AND every voice is on the final figure, the strands enter a
+  "final unison" state: brighter, thicker, and shimmer with a small per-strand
+  sine-wave jitter.
+- **Polyrhythmic sparkles** — small colored pinpoints flash at the midpoint
+  between any two voices on different figures whose notes coincide within ~50 ms.
+  Each sparkle takes the average HSL hue of the two voices that triggered it
+  (so vibraphone+cello mixes to a different sparkle hue than harp+flute).
+
+## Onboarding & feedback
+
+- **Per-voice spawn hints** — each new voice spawn fires a 9 s transient at the
+  bottom of the canvas, walking the player through controls (voices 2–6),
+  visualization (voice 7), context about the piece (voices 8–10), and the
+  ending goal (voice 11). See `VOICE_SPAWN_HINTS` in `main.js`.
+- **Persistent contextual hints** — when no transient is active, the bottom slot
+  shows the most relevant next-step prompt, e.g. "click empty space to add the
+  next instrument", "hover any voice or the ostinato to see its controls",
+  "bring every voice to figure 53 — Conclude unlocks when they all arrive".
+- **Transient click-feedback** — when a click can't spawn, a 1.6 s message
+  explains why ("wait — next voice ready in Xs", "all 11 voices in — press R
+  to randomize", "ending mode — spawning disabled").
+- **Help modal** (top-bar `?` or keyboard `?`) — full HTML reference of all
+  controls, organized by context. Game keys are swallowed while it's open.
 
 ## Adding a new instrument
 

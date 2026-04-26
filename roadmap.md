@@ -63,30 +63,55 @@ Make the screen *teach* the listener what's happening.
 
 ## Beyond the core (added on the way)
 
-Smaller features that emerged during Phase 1 / 2 iteration:
+Smaller features that emerged during the Phase 1–3 iteration:
 
 - **Ostinato pitch shifting** — left/right click cycles C4 / C5 / C6 (default C5)
+- **Ostinato hide (H)** — visually hides the central circle without muting
 - **Repeat lock (R)** — voice stops auto-advancing; visualized as a thin
-  in-color ring just outside the circle. Locked voices opt out of the
-  ensemble's leading-edge calculation entirely.
+  in-color ring just outside the circle
 - **Instrument swapping (← / →)** — cycle a voice's timbre through the roster
   while keeping its pattern position, gain, mute, channel
+- **Power moves** — ctrl + click for ±5 figure jumps; shift + left-click to
+  align every other voice to the clicked voice's figure
+- **Random button + R-key** — when the full roster is in, reroll all unlocked
+  voices to random figures with one click
 - **Eighth-note grid alignment** — new voices snap their first beat to the
   ostinato pulse so the rhythm never tilts
+- **Mute fades** — ~150 ms exponential approach when muting/unmuting
+  (Web Audio `setTargetAtTime`); click-free
+- **Sustained-instrument note envelope** — winds and bowed strings cut at the
+  written note end with a 10 ms release so long sample tails don't smear
+- **Help modal + onboarding hints** — `?` button opens a full controls
+  reference; per-voice spawn fires a 9 s introductory hint walking the player
+  through controls, visualization, the piece's history, and the ending goal
+- **Conclude unlocking** — Conclude button hidden until every voice is on the
+  final figure; persistent hint nudges the player toward the goal
+- **Deploy automation** — pushes to `master` trigger a GitHub Actions workflow
+  that uploads to one.com via SFTP (mirrors the SubjectQuiz pattern)
 
 ---
 
-## Phase 3 — Personality & living ensemble
+## Phase 3 — Personality & living ensemble (in progress)
 
 Make the simulation feel like *humans*, not agents.
 
+- **Unison rewarded visually** ✓ — voices on the same figure are linked by
+  warm gold strands (halo + bright core), pulsing on cluster note onsets. In
+  the final-unison state (ending mode + every voice on the last figure) the
+  strands brighten dramatically and shimmer with a small per-strand jitter.
+- **Polyrhythmic sparkles** ✓ (added beyond the original Phase 3 scope) —
+  small colored pinpoints flash at the midpoint between voices on different
+  figures whose notes coincide within ~50 ms. Each sparkle takes the average
+  HSL hue of the two voices, so the canvas reads which voices just kissed.
+- **Background spread gradient** ✓ — bg fades from white (full unison) to
+  near-black (11 voices on 11 different figures), anchored to the absolute
+  roster size. Lerps softly between states. Pairs with the gold strands as a
+  convergence/divergence duality.
 - **Performer personalities** — small per-voice modifiers to dwell time:
   *eager* (shorter dwell), *patient* (longer), *adventurous* (occasionally
-  skips a figure), *clingy* (likes unison with neighbors).
-- **Unison rewarded visually** — when 2+ voices land on the same figure,
-  threads of light arc between them (triangle for 3, pentagram for 5, etc.).
+  skips a figure), *clingy* (likes unison with neighbors). *(open)*
 - **Rest as gesture** — click-and-drag through multiple voices to mute them
-  all in one breath; reverse sweep to bring them back.
+  all in one breath; reverse sweep to bring them back. *(open)*
 
 ---
 

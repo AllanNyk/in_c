@@ -880,18 +880,18 @@ function render() {
         ? `rgba(120, 120, 120, ${hintAlpha})`
         : `rgba(220, 220, 220, ${hintAlpha})`;
       ctx2d.fillStyle = hintCol;
-      ctx2d.font = '12px system-ui, sans-serif';
+      ctx2d.font = '24px system-ui, sans-serif';
       ctx2d.textAlign = 'center';
-      ctx2d.fillText(hintText, cx, h - 26);
+      ctx2d.fillText(hintText, cx, h - 36);
     }
   }
 
   if (started && endingMode && voices.length > 0 && voices.every(v => v.atEnd)) {
     const hintCol = bgValue > 160 ? '#888' : '#ccc';
     ctx2d.fillStyle = hintCol;
-    ctx2d.font = '12px system-ui, sans-serif';
+    ctx2d.font = '24px system-ui, sans-serif';
     ctx2d.textAlign = 'center';
-    ctx2d.fillText('all voices on the final figure — mute them one by one to end', cx, h - 44);
+    ctx2d.fillText('all voices on the final figure — mute them one by one to end', cx, h - 76);
   }
 
   // ---- Topbar button visibility ------------------------------------------
