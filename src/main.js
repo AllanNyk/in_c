@@ -131,6 +131,7 @@ const aboutClose     = aboutModal.querySelector('.about-close');
 // Onboarding state
 let everHovered = false;
 let everPressedRandomize = false;
+let dismantleCompleteTime = -1; // audio time when ostinato + every voice were dismissed
 
 // Transient one-line message, used to give feedback for actions that silently
 // failed (e.g. click-to-spawn during cooldown). Cleared automatically by render.
@@ -930,14 +931,24 @@ function render() {
   if (started && endingMode && voices.length > 0) {
     const allDismantled = ostinato.dismissed && voices.every(v => v.dismissed);
     if (allDismantled) {
-      // Curtain text — replaces all instructional UI when the piece is gone.
-      ctx2d.textAlign = 'center';
-      ctx2d.fillStyle = bgValue > 160 ? '#444' : '#ddd';
-      ctx2d.font = '600 64px system-ui, sans-serif';
-      ctx2d.fillText('In C', cx, cy - 18);
-      ctx2d.fillStyle = bgValue > 160 ? '#888' : '#bbb';
-      ctx2d.font = '20px system-ui, sans-serif';
-      ctx2d.fillText('thank you for playing', cx, cy + 30);
+      if (dismantleCompleteTime < 0) dismantleCompleteTime = now;
+      // Hold a 2-second silence after the last part disappears, then fade in
+      // the curtain over ~2.5 seconds.
+      const FADE_DELAY = 2.0;
+      const FADE_DURATION = 2.5;
+      const elapsed = now - dismantleCompleteTime;
+      const fade = Math.max(0, Math.min(1, (elapsed - FADE_DELAY) / FADE_DURATION));
+      if (fade > 0) {
+        ctx2d.textAlign = 'center';
+        const titleRGB = bgValue > 160 ? '68, 68, 68' : '221, 221, 221';
+        const subRGB   = bgValue > 160 ? '136, 136, 136' : '187, 187, 187';
+        ctx2d.fillStyle = `rgba(${titleRGB}, ${fade})`;
+        ctx2d.font = '600 64px system-ui, sans-serif';
+        ctx2d.fillText('In C.', cx, cy - 24);
+        ctx2d.fillStyle = `rgba(${subRGB}, ${fade})`;
+        ctx2d.font = '20px system-ui, sans-serif';
+        ctx2d.fillText('thank you for playing', cx, cy + 56);
+      }
     } else if (voices.every(v => v.dismissed || v.atEnd)) {
       const hintCol = bgValue > 160 ? '#888' : '#ccc';
       ctx2d.fillStyle = hintCol;
