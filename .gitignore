@@ -13,3 +13,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Score sources (kept local; not in public repo for copyright reasons)
+In C.xml
+In_C_score_and_text.pdf

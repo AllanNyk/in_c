@@ -45,7 +45,8 @@ tools/
                              MP3 banks under assets/audio/<instrument>/<note>.mp3.
                              Sharps written as 's' (cs4 = C#4) for URL safety.
 assets/audio/<instrument>/ — the pre-rendered MP3 banks (one folder per instrument)
-In C.xml                   — MusicXML transcription of Riley's score
+In C.xml                   — MusicXML transcription of Riley's score (NOT in the
+                             public repo — see "Score source files" below)
 roadmap.md                 — phased build plan + status
 design_holes.md            — open design questions
 unused_instruments.md      — instruments built but not currently in the roster
@@ -164,6 +165,29 @@ In `src/main.js`:
 - `RIPPLE_*`, `RING_OFFSET`, `DOT_*` — Phase 2 visual params
 
 Per-voice constants live on Voice instances; per-instrument config in `roster.js`.
+
+## Score source files
+
+`In C.xml` and `In_C_score_and_text.pdf` are intentionally `.gitignore`d and
+not included in the public repository. They are derivatives of Terry Riley's
+copyrighted 1964 score.
+
+To run the app you need `In C.xml` at the project root (path: `./In C.xml`),
+since `score.js` fetches it on page load. You can obtain it by:
+
+- transcribing the score yourself in any notation editor (Sibelius, MuseScore,
+  Dorico, etc.) and exporting MusicXML; or
+- locating an existing MusicXML transcription online.
+
+The structure the parser expects:
+
+- bar 1 contains the eighth-note ostinato (eight C5 eighths in 4/4, with a
+  `<transpose><octave-change>1</octave-change></transpose>` so the C5 written
+  sounds at C6);
+- bars with pitched notes after that are the 53 figures, in order;
+- spacer bars (rest-only) between figures are skipped automatically;
+- grace notes are encoded as `<grace />` elements with no `<duration>` and are
+  played as 32nd-note ornaments before their main note.
 
 ## Conventions
 
