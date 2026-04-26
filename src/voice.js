@@ -79,22 +79,23 @@ export class Voice {
   }
 
   // Schedule notes from this voice's current pattern up to the audio horizon.
-  // Loops the current pattern as needed; advancing is the conductor's job.
-  scheduleUpTo(horizon) {
+  // tempoFactor scales the score's notional 120-BPM seconds to real seconds
+  // (e.g. 0.5 at 240 BPM, 2.0 at 60 BPM).
+  scheduleUpTo(horizon, tempoFactor = 1) {
     while (this.nextLoopStart < horizon) {
       const pat = this.currentPattern;
       if (!pat) break;
       const now = this.audio.currentTime;
       for (const n of pat.notes) {
-        const t = this.nextLoopStart + n.time;
-        if (t < now - 0.01) continue; // skip notes already in the past
+        const t = this.nextLoopStart + n.time * tempoFactor;
+        if (t < now - 0.01) continue;
         const midi = n.midi + this.transposition;
         const file = midiToFilename(midi);
         const noteGain = n.grace ? 0.55 : 1.0;
         this.audio.scheduleNote(this.channel, this.instrument, file, t, noteGain);
         if (!n.grace && t > this.lastOnsetTime) this.lastOnsetTime = t;
       }
-      this.nextLoopStart += pat.duration;
+      this.nextLoopStart += pat.duration * tempoFactor;
       this.loopCount++;
     }
   }

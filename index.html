@@ -25,6 +25,8 @@
     #topbar > * { pointer-events: auto; }
     #topbar label { display: flex; align-items: center; gap: 8px; color: #888; }
     #master-vol { width: 140px; }
+    #tempo { width: 110px; }
+    #tempo-value { display: inline-block; width: 28px; text-align: right; color: #aaa; }
     #conclude-btn {
       margin-left: auto;
       padding: 6px 14px;
@@ -49,6 +51,7 @@
   <div id="topbar">
     <div id="title">In C — Terry Riley</div>
     <label>volume <input id="master-vol" type="range" min="0" max="1" step="0.01" value="0.85"></label>
+    <label>tempo <input id="tempo" type="range" min="60" max="200" step="1" value="120"> <span id="tempo-value">120</span></label>
     <button id="conclude-btn">Conclude</button>
   </div>
   <canvas id="canvas"></canvas>
