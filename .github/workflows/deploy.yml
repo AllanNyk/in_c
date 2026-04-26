@@ -30,6 +30,7 @@ jobs:
           -mkdir webroots/www/in_c/assets/audio/crotales
           put index.html webroots/www/in_c/index.html
           put src/*.js webroots/www/in_c/src/
+          -put assets/og-preview.png webroots/www/in_c/assets/og-preview.png
           put assets/audio/vibraphone/*.mp3 webroots/www/in_c/assets/audio/vibraphone/
           put assets/audio/marimba/*.mp3 webroots/www/in_c/assets/audio/marimba/
           put assets/audio/celeste/*.mp3 webroots/www/in_c/assets/audio/celeste/
