@@ -1,0 +1,46 @@
+name: Deploy to one.com
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy via SFTP
+        run: |
+          sshpass -p "${{ secrets.FTP_PASSWORD }}" sftp -o StrictHostKeyChecking=no "${{ secrets.FTP_USERNAME }}@${{ secrets.FTP_SERVER }}" <<'SFTP'
+          -mkdir webroots/www/in_c
+          -mkdir webroots/www/in_c/src
+          -mkdir webroots/www/in_c/assets
+          -mkdir webroots/www/in_c/assets/audio
+          -mkdir webroots/www/in_c/assets/audio/vibraphone
+          -mkdir webroots/www/in_c/assets/audio/marimba
+          -mkdir webroots/www/in_c/assets/audio/celeste
+          -mkdir webroots/www/in_c/assets/audio/harp
+          -mkdir webroots/www/in_c/assets/audio/harpsichord
+          -mkdir webroots/www/in_c/assets/audio/piano
+          -mkdir webroots/www/in_c/assets/audio/flute
+          -mkdir webroots/www/in_c/assets/audio/clarinet
+          -mkdir webroots/www/in_c/assets/audio/oboe
+          -mkdir webroots/www/in_c/assets/audio/cello
+          -mkdir webroots/www/in_c/assets/audio/doublebass
+          -mkdir webroots/www/in_c/assets/audio/crotales
+          put index.html webroots/www/in_c/index.html
+          put src/*.js webroots/www/in_c/src/
+          put assets/audio/vibraphone/*.mp3 webroots/www/in_c/assets/audio/vibraphone/
+          put assets/audio/marimba/*.mp3 webroots/www/in_c/assets/audio/marimba/
+          put assets/audio/celeste/*.mp3 webroots/www/in_c/assets/audio/celeste/
+          put assets/audio/harp/*.mp3 webroots/www/in_c/assets/audio/harp/
+          put assets/audio/harpsichord/*.mp3 webroots/www/in_c/assets/audio/harpsichord/
+          put assets/audio/piano/*.mp3 webroots/www/in_c/assets/audio/piano/
+          put assets/audio/flute/*.mp3 webroots/www/in_c/assets/audio/flute/
+          put assets/audio/clarinet/*.mp3 webroots/www/in_c/assets/audio/clarinet/
+          put assets/audio/oboe/*.mp3 webroots/www/in_c/assets/audio/oboe/
+          put assets/audio/cello/*.mp3 webroots/www/in_c/assets/audio/cello/
+          put assets/audio/doublebass/*.mp3 webroots/www/in_c/assets/audio/doublebass/
+          put assets/audio/crotales/*.mp3 webroots/www/in_c/assets/audio/crotales/
+          bye
+          SFTP
