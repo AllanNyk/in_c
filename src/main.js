@@ -235,13 +235,23 @@ function voicePosition(i, total) {
   return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
 }
 
-function voiceRadius(v) { return 22 + v.gain * 8; }
+function voiceRadius(v) {
+  // Visual size scales with volume: ~2 px when muted, up to 45 px at full
+  // volume (50% larger than the previous max). Linear so the slider feels
+  // responsive across its whole range.
+  return 2 + v.gain * 43;
+}
+// Always allow at least a comfortable click target even when the circle is
+// nearly invisible — a muted voice can still be hovered/tapped to bring its
+// volume back up.
+const MIN_HIT_RADIUS = 22;
+function voiceHitRadius(v) { return Math.max(MIN_HIT_RADIUS, voiceRadius(v)); }
 
 function findHover(x, y) {
   for (let i = 0; i < voices.length; i++) {
     if (voices[i].dismissed) continue;
     const p = voicePosition(i, voices.length);
-    const r = voiceRadius(voices[i]);
+    const r = voiceHitRadius(voices[i]);
     const dx = x - p.x, dy = y - p.y;
     if (dx * dx + dy * dy <= (r + 4) * (r + 4)) return { kind: 'voice', idx: i };
   }
@@ -1099,11 +1109,17 @@ function render() {
     }
 
     // Pattern number
-    ctx2d.fillStyle = v.muted ? voiceColor(v) : '#fff';
-    ctx2d.font = 'bold 12px system-ui, sans-serif';
-    ctx2d.textAlign = 'center';
-    ctx2d.textBaseline = 'middle';
-    ctx2d.fillText(String(v.patternIdx + 1), p.x, p.y);
+    // Fade the figure number when the circle gets too small to hold the text.
+    const textAlpha = Math.min(1, Math.max(0, (r - 8) / 10));
+    if (textAlpha > 0) {
+      ctx2d.fillStyle = v.muted
+        ? voiceColor(v).replace(/hsla?\(([^)]*)\)/, (_, body) => `hsla(${body.replace(/,\s*[\d.]+\s*\)?$/, '')}, ${textAlpha})`)
+        : `rgba(255, 255, 255, ${textAlpha})`;
+      ctx2d.font = 'bold 12px system-ui, sans-serif';
+      ctx2d.textAlign = 'center';
+      ctx2d.textBaseline = 'middle';
+      ctx2d.fillText(String(v.patternIdx + 1), p.x, p.y);
+    }
   }
 
   // ---- Polyrhythmic sparkles -------------------------------------------
