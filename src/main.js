@@ -490,6 +490,7 @@ touchPanel.addEventListener('click', (e) => {
         closeTouchPanel();
         return;
       }
+    }
   }
   refreshTouchPanel();
 });
