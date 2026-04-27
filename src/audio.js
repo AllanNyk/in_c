@@ -15,31 +15,54 @@ export class AudioEngine {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.85;
 
-    // Master bus compressor — gentle gluing of the ensemble dynamics so the
-    // overall sound feels "produced" rather than raw samples stacked together.
-    // Mastering-style settings: soft knee, moderate ratio, fast-ish attack,
-    // medium release. Final stage before the destination — both dry and wet
-    // (reverb) signals route through it.
+    // Master 3-band EQ (low shelf, mid peaking, high shelf). All start flat
+    // (gain = 0 dB). Dry and wet (reverb) signals both route through it
+    // before the compressor, so the EQ shapes the entire mix coherently.
+    this.eqBass = this.ctx.createBiquadFilter();
+    this.eqBass.type = 'lowshelf';
+    this.eqBass.frequency.value = 200;
+    this.eqBass.gain.value = 0;
+
+    this.eqMid = this.ctx.createBiquadFilter();
+    this.eqMid.type = 'peaking';
+    this.eqMid.frequency.value = 1000;
+    this.eqMid.Q.value = 1.0;
+    this.eqMid.gain.value = 0;
+
+    this.eqTreble = this.ctx.createBiquadFilter();
+    this.eqTreble.type = 'highshelf';
+    this.eqTreble.frequency.value = 4000;
+    this.eqTreble.gain.value = 0;
+
+    // Master bus compressor — gentle gluing of the ensemble dynamics.
     this.compressor = this.ctx.createDynamicsCompressor();
-    this.compressor.threshold.value = -18;  // dB
-    this.compressor.knee.value = 12;        // soft entry
-    this.compressor.ratio.value = 3;        // moderate
-    this.compressor.attack.value = 0.005;   // 5 ms — catch transients
-    this.compressor.release.value = 0.150;  // 150 ms — natural decay
+    this.compressor.threshold.value = -18;
+    this.compressor.knee.value = 12;
+    this.compressor.ratio.value = 3;
+    this.compressor.attack.value = 0.005;
+    this.compressor.release.value = 0.150;
+
+    // Chain: master → bass → mid → treble → compressor → destination
+    this.eqBass.connect(this.eqMid);
+    this.eqMid.connect(this.eqTreble);
+    this.eqTreble.connect(this.compressor);
     this.compressor.connect(this.ctx.destination);
+    this.master.connect(this.eqBass);
 
-    this.master.connect(this.compressor);
-
-    // Reverb send: master also feeds a convolver via a wetGain control.
-    // Until loadIR is called the convolver has no buffer and is silent, so
-    // the audio chain works as dry-only.
+    // Reverb send shares the same EQ chain so reverb is shaped consistently
+    // with the dry signal. Until loadIR fills the convolver, that path is
+    // silent and the chain works dry-only.
     this.convolver = this.ctx.createConvolver();
     this.wetGain = this.ctx.createGain();
     this.wetGain.gain.value = 0.25;
     this.master.connect(this.convolver);
     this.convolver.connect(this.wetGain);
-    this.wetGain.connect(this.compressor);
+    this.wetGain.connect(this.eqBass);
   }
+
+  setEqBass(db)   { if (this.eqBass)   this.eqBass.gain.value   = Math.max(-12, Math.min(12, db)); }
+  setEqMid(db)    { if (this.eqMid)    this.eqMid.gain.value    = Math.max(-12, Math.min(12, db)); }
+  setEqTreble(db) { if (this.eqTreble) this.eqTreble.gain.value = Math.max(-12, Math.min(12, db)); }
 
   async loadIR(url) {
     if (!this.ctx) return;

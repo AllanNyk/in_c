@@ -131,6 +131,9 @@ const tempoInput     = document.getElementById('tempo');
 const tempoValueEl   = document.getElementById('tempo-value');
 const reverbInput    = document.getElementById('reverb');
 const reverbValueEl  = document.getElementById('reverb-value');
+const eqBassInput    = document.getElementById('eq-bass');
+const eqMidInput     = document.getElementById('eq-mid');
+const eqTrebleInput  = document.getElementById('eq-treble');
 const concludeBtn    = document.getElementById('conclude-btn');
 const randomBtn      = document.getElementById('random-btn');
 const helpBtn        = document.getElementById('help-btn');
@@ -203,6 +206,10 @@ reverbInput.addEventListener('input', e => {
   audio.setWetLevel(v);
   reverbValueEl.textContent = `${Math.round(v * 100)}%`;
 });
+
+eqBassInput.addEventListener('input',   e => audio.setEqBass(parseFloat(e.target.value)));
+eqMidInput.addEventListener('input',    e => audio.setEqMid(parseFloat(e.target.value)));
+eqTrebleInput.addEventListener('input', e => audio.setEqTreble(parseFloat(e.target.value)));
 
 concludeBtn.addEventListener('click', () => {
   if (!started) return;
