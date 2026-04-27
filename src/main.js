@@ -20,7 +20,7 @@ const AUTO_ADVANCE_MIN_LOOPS = 2;   // a voice plays each figure at least this m
 const AUTO_ADVANCE_MIN_DWELL = 20;  // seconds — and stays at least this long, even on short figures
 const BASE_BPM           = 120;  // score is encoded as seconds-at-120-BPM
 const BASE_OSTINATO_INTERVAL = 0.25; // eighth at base BPM
-const SCHEDULER_LOOKAHEAD = 0.15;
+const SCHEDULER_LOOKAHEAD = 0.5; // larger buffer so audio survives main-thread stalls (iOS rapid taps)
 const OSTINATO_RADIUS    = 26;
 
 // Phase 2 visual params
@@ -156,6 +156,7 @@ const tpHideBtn      = touchPanel.querySelector('.tp-hide-btn');
 
 // Touch-panel selection state. selected: null | { kind: 'voice', idx } | { kind: 'ostinato' }
 let panelSelected = null;
+let lastPanelRefreshT = -1;
 
 // Onboarding state
 let everHovered = false;
@@ -480,6 +481,8 @@ tpVolume.addEventListener('input', () => {
 touchPanel.addEventListener('click', (e) => {
   const action = e.target.dataset && e.target.dataset.action;
   if (!action || !panelSelected) return;
+  // Belt-and-suspenders for iOS: re-arm the audio context on every panel tap.
+  if (audio.ctx && audio.ctx.state !== 'running') audio.ctx.resume().catch(() => {});
   if (panelSelected.kind === 'voice') {
     const v = voices[panelSelected.idx];
     if (!v || v.dismissed) { closeTouchPanel(); return; }
@@ -1203,9 +1206,13 @@ function render() {
   }
 
   // ---- Touch panel sync -------------------------------------------------
-  // Cheap DOM refresh each frame so figure numbers / mute / lock states stay
-  // current as voices auto-advance or are touched elsewhere.
-  if (panelSelected) refreshTouchPanel();
+  // Throttled DOM refresh (4 Hz) so figure numbers / mute / lock states stay
+  // current as voices auto-advance, but we don't burn 60 fps of DOM mutations
+  // (which can starve the audio scheduler on iOS during rapid-tap sequences).
+  if (panelSelected && (now - lastPanelRefreshT) > 0.25) {
+    refreshTouchPanel();
+    lastPanelRefreshT = now;
+  }
 
   // ---- Topbar button visibility ------------------------------------------
   // Random: show once the full roster is in. Conclude: show once everyone
