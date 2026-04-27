@@ -90,10 +90,19 @@ Global keys (no hover required):
 
 Click on empty canvas:
 - First click starts the engine + spawns voice 1 from the roster.
-- Subsequent clicks spawn the next roster voice, gated by a 20 s cooldown
+- Subsequent clicks spawn the next roster voice, gated by a 10 s cooldown
   (a thin gray arc around the ostinato shows the cooldown progress).
 - If the click can't spawn (cooldown active, roster full, or in ending mode),
   a transient feedback message appears at the bottom of the screen.
+
+Touch / mobile:
+- Tap a voice or the ostinato to open the bottom-screen control panel
+  (`#touch-panel` in `index.html`). All voice/ostinato actions are exposed as
+  buttons + a volume slider — touch has no hover/scroll/keyboard.
+- Tap empty space spawns (or closes the panel if open).
+- Mouse and touch events go through a single `pointerdown` handler in
+  `main.js` (`handleClick`); `e.pointerType` branches between the two paths.
+- The canvas-drawn hover panel + keyboard shortcuts are mouse-only.
 
 ## Auto-advance rule
 

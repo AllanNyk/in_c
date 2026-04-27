@@ -15,7 +15,7 @@ import { ROSTER } from './roster.js';
 
 // ---- Tunable parameters ---------------------------------------------------
 
-const SPAWN_COOLDOWN     = 20.0;
+const SPAWN_COOLDOWN     = 10.0;
 const AUTO_ADVANCE_MIN_LOOPS = 2;   // a voice plays each figure at least this many times
 const AUTO_ADVANCE_MIN_DWELL = 20;  // seconds — and stays at least this long, even on short figures
 const BASE_BPM           = 120;  // score is encoded as seconds-at-120-BPM
@@ -127,6 +127,21 @@ const helpClose      = helpModal.querySelector('.help-close');
 const aboutBtn       = document.getElementById('about-btn');
 const aboutModal     = document.getElementById('about-modal');
 const aboutClose     = aboutModal.querySelector('.about-close');
+const touchPanel     = document.getElementById('touch-panel');
+const tpName         = touchPanel.querySelector('.tp-name');
+const tpSub          = touchPanel.querySelector('.tp-sub');
+const tpClose        = touchPanel.querySelector('.tp-close');
+const tpVolume       = touchPanel.querySelector('.tp-volume');
+const tpInstrRow     = touchPanel.querySelector('.tp-instr-row');
+const tpPitchRow     = touchPanel.querySelector('.tp-pitch-row');
+const tpFigureRow    = touchPanel.querySelector('.tp-figure-row');
+const tpAlignBtn     = touchPanel.querySelector('.tp-align-btn');
+const tpLockBtn      = touchPanel.querySelector('.tp-lock-btn');
+const tpHideBtn      = touchPanel.querySelector('.tp-hide-btn');
+const tpDismissRow   = touchPanel.querySelector('.tp-dismiss-row');
+
+// Touch-panel selection state. selected: null | { kind: 'voice', idx } | { kind: 'ostinato' }
+let panelSelected = null;
 
 // Onboarding state
 let everHovered = false;
@@ -222,24 +237,68 @@ function hoveredTarget() {
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-canvas.addEventListener('mousemove', e => {
-  hovered = findHover(e.clientX, e.clientY);
-  canvas.classList.toggle('hover-target', hovered !== null);
-  if (hovered) everHovered = true;
+// Unified mouse + touch input via Pointer Events. Mouse acts on press
+// (preserving existing left/right-click semantics + modifier keys); touch
+// requires a short tap (no drag) and routes through the on-screen control
+// panel since touch has no hover, scroll, right-click or keyboard.
+
+let pressInfo = null;
+const TAP_MOVE_THRESHOLD_SQ = 100;
+
+canvas.addEventListener('pointermove', e => {
+  // Hover (mouse only)
+  if (e.pointerType === 'mouse') {
+    hovered = findHover(e.clientX, e.clientY);
+    canvas.classList.toggle('hover-target', hovered !== null);
+    if (hovered) everHovered = true;
+  }
+  // Cancel pending tap if the touch dragged
+  if (pressInfo) {
+    const dx = e.clientX - pressInfo.x;
+    const dy = e.clientY - pressInfo.y;
+    if (dx * dx + dy * dy > TAP_MOVE_THRESHOLD_SQ) pressInfo = null;
+  }
 });
-canvas.addEventListener('mouseleave', () => {
+canvas.addEventListener('pointerleave', () => {
   hovered = null;
   canvas.classList.remove('hover-target');
 });
 
-canvas.addEventListener('mousedown', async (e) => {
+canvas.addEventListener('pointerdown', async (e) => {
   e.preventDefault();
+  if (e.pointerType === 'mouse') {
+    await handleClick(e.clientX, e.clientY, {
+      button: e.button,
+      ctrl: e.ctrlKey,
+      meta: e.metaKey,
+      shift: e.shiftKey,
+      isTouch: false,
+    });
+  } else {
+    pressInfo = { x: e.clientX, y: e.clientY, hit: findHover(e.clientX, e.clientY) };
+  }
+});
 
+canvas.addEventListener('pointerup', async (e) => {
+  if (!pressInfo || e.pointerType === 'mouse') { pressInfo = null; return; }
+  const info = pressInfo;
+  pressInfo = null;
+  await handleClick(info.x, info.y, {
+    button: 0,
+    ctrl: false, meta: false, shift: false,
+    isTouch: true,
+    hitOverride: info.hit,
+  });
+});
+
+canvas.addEventListener('pointercancel', () => { pressInfo = null; });
+
+async function handleClick(x, y, opts) {
+  // First click: start the engine + spawn voice 1.
   if (!started) {
     if (!patterns) return;
     await audio.init();
     ostinato.channel = audio.createChannel(ostinato.gain);
-    // Preload all three pitch options so cycling is instant.
     await Promise.all([
       audio.loadSample('piano', 'c4'),
       audio.loadSample('piano', 'c5'),
@@ -254,54 +313,58 @@ canvas.addEventListener('mousedown', async (e) => {
     return;
   }
 
-  const hit = findHover(e.clientX, e.clientY);
+  const hit = opts.hitOverride !== undefined ? opts.hitOverride : findHover(x, y);
 
-  // Dismantling phase: every left-click dismisses the targeted part for good.
-  if (endingMode && e.button === 0) {
+  // Dismantling phase: any left-click/tap dismisses the targeted part forever.
+  if (endingMode && opts.button === 0) {
     if (hit && hit.kind === 'voice') {
       voices[hit.idx].dismiss();
+      if (panelSelected && panelSelected.kind === 'voice' && panelSelected.idx === hit.idx) closeTouchPanel();
       return;
     }
     if (hit && hit.kind === 'ostinato') {
       ostinato.dismiss();
+      if (panelSelected && panelSelected.kind === 'ostinato') closeTouchPanel();
       return;
     }
   }
 
-  if (hit && hit.kind === 'voice') {
-    const v = voices[hit.idx];
-    const big = e.ctrlKey || e.metaKey;
-    if (e.button === 0) {
-      if (e.shiftKey) {
-        // Align every other voice to this voice's current figure.
-        const target = v.patternIdx;
-        for (const other of voices) {
-          if (other === v) continue;
-          other.advance(target - other.patternIdx);
+  // Touch: tap on a part opens the control panel; tap on empty space closes
+  // an open panel or spawns the next voice.
+  if (opts.isTouch) {
+    if (hit && hit.kind === 'voice') { openTouchPanel({ kind: 'voice', idx: hit.idx }); return; }
+    if (hit && hit.kind === 'ostinato') { openTouchPanel({ kind: 'ostinato' }); return; }
+    if (panelSelected) { closeTouchPanel(); return; }
+  } else {
+    // Mouse: original click semantics.
+    if (hit && hit.kind === 'voice') {
+      const v = voices[hit.idx];
+      const big = opts.ctrl || opts.meta;
+      if (opts.button === 0) {
+        if (opts.shift) {
+          const target = v.patternIdx;
+          for (const other of voices) {
+            if (other === v) continue;
+            other.advance(target - other.patternIdx);
+          }
+        } else {
+          v.advance(big ? 5 : 1);
         }
-      } else {
-        v.advance(big ? 5 : 1);
+      } else if (opts.button === 2) {
+        v.advance(big ? -5 : -1);
       }
-    } else if (e.button === 2) {
-      v.advance(big ? -5 : -1);
+      return;
     }
-    return;
-  }
-  if (hit && hit.kind === 'ostinato') {
-    // Left = up (toward cap C6), right = down toward C4.
-    if (e.button === 0) ostinato.shiftPitch(+1);
-    else if (e.button === 2) ostinato.shiftPitch(-1);
-    return;
+    if (hit && hit.kind === 'ostinato') {
+      if (opts.button === 0) ostinato.shiftPitch(+1);
+      else if (opts.button === 2) ostinato.shiftPitch(-1);
+      return;
+    }
   }
 
-  if (endingMode) {
-    transient('ending mode — spawning disabled');
-    return;
-  }
-  if (voices.length >= ROSTER.length) {
-    transient('all 11 voices in — press R to randomize');
-    return;
-  }
+  // Empty-space: try to spawn next voice.
+  if (endingMode) { transient('ending mode — spawning disabled'); return; }
+  if (voices.length >= ROSTER.length) { transient('all 11 voices in — press R to randomize'); return; }
   const now = audio.currentTime;
   const elapsed = now - lastSpawnTime;
   if (elapsed < SPAWN_COOLDOWN) {
@@ -311,6 +374,99 @@ canvas.addEventListener('mousedown', async (e) => {
   }
   await spawnNextVoice();
   lastSpawnTime = now;
+}
+
+// ---- Touch control panel -------------------------------------------------
+
+function openTouchPanel(sel) {
+  panelSelected = sel;
+  refreshTouchPanel();
+  touchPanel.hidden = false;
+}
+function closeTouchPanel() {
+  panelSelected = null;
+  touchPanel.hidden = true;
+}
+function refreshTouchPanel() {
+  if (!panelSelected) return;
+  if (panelSelected.kind === 'voice') {
+    const v = voices[panelSelected.idx];
+    if (!v || v.dismissed) { closeTouchPanel(); return; }
+    tpName.textContent = v.instrument;
+    tpSub.textContent = v.repeatLocked
+      ? `figure ${v.patternIdx + 1}/${v.figureCount} · locked`
+      : `figure ${v.patternIdx + 1}/${v.figureCount}`;
+    tpVolume.value = v.gain;
+    tpInstrRow.hidden = false;
+    tpPitchRow.hidden = true;
+    tpFigureRow.hidden = false;
+    tpAlignBtn.hidden = false;
+    tpLockBtn.hidden = false;
+    tpHideBtn.hidden = true;
+    tpDismissRow.hidden = !endingMode;
+    setActive(touchPanel.querySelector('[data-action="mute"]'), v.muted);
+    setActive(tpLockBtn, v.repeatLocked);
+  } else if (panelSelected.kind === 'ostinato') {
+    if (ostinato.dismissed) { closeTouchPanel(); return; }
+    tpName.textContent = 'ostinato';
+    tpSub.textContent = `${ostinato.noteLabel} · 8th-note pulse${ostinato.hidden ? ' · hidden' : ''}`;
+    tpVolume.value = ostinato.gain;
+    tpInstrRow.hidden = true;
+    tpPitchRow.hidden = false;
+    tpFigureRow.hidden = true;
+    tpAlignBtn.hidden = true;
+    tpLockBtn.hidden = true;
+    tpHideBtn.hidden = false;
+    tpDismissRow.hidden = !endingMode;
+    setActive(touchPanel.querySelector('[data-action="mute"]'), ostinato.muted);
+    setActive(tpHideBtn, ostinato.hidden);
+  }
+}
+function setActive(btn, on) { btn.classList.toggle('active', !!on); }
+
+tpClose.addEventListener('click', closeTouchPanel);
+tpVolume.addEventListener('input', () => {
+  if (!panelSelected) return;
+  const v = parseFloat(tpVolume.value);
+  if (panelSelected.kind === 'voice') voices[panelSelected.idx].setGain(v);
+  else if (panelSelected.kind === 'ostinato') ostinato.setGain(v);
+});
+
+touchPanel.addEventListener('click', (e) => {
+  const action = e.target.dataset && e.target.dataset.action;
+  if (!action || !panelSelected) return;
+  if (panelSelected.kind === 'voice') {
+    const v = voices[panelSelected.idx];
+    if (!v || v.dismissed) { closeTouchPanel(); return; }
+    switch (action) {
+      case 'back-5': v.advance(-5); break;
+      case 'back-1': v.advance(-1); break;
+      case 'fwd-1':  v.advance(+1); break;
+      case 'fwd-5':  v.advance(+5); break;
+      case 'instr-prev': cycleVoiceInstrument(v, -1); break;
+      case 'instr-next': cycleVoiceInstrument(v, +1); break;
+      case 'mute': v.toggleMute(); break;
+      case 'lock': v.toggleRepeat(); break;
+      case 'align': {
+        const target = v.patternIdx;
+        for (const other of voices) {
+          if (other === v) continue;
+          other.advance(target - other.patternIdx);
+        }
+        break;
+      }
+      case 'dismiss': v.dismiss(); closeTouchPanel(); return;
+    }
+  } else if (panelSelected.kind === 'ostinato') {
+    switch (action) {
+      case 'pitch-up':   ostinato.shiftPitch(+1); break;
+      case 'pitch-down': ostinato.shiftPitch(-1); break;
+      case 'mute': ostinato.toggleMute(); break;
+      case 'hide': ostinato.toggleHidden(); break;
+      case 'dismiss': ostinato.dismiss(); closeTouchPanel(); return;
+    }
+  }
+  refreshTouchPanel();
 });
 
 canvas.addEventListener('wheel', (e) => {
@@ -957,6 +1113,11 @@ function render() {
       ctx2d.fillText('click each voice and the ostinato to dismantle the piece', cx, h - 76);
     }
   }
+
+  // ---- Touch panel sync -------------------------------------------------
+  // Cheap DOM refresh each frame so figure numbers / mute / lock states stay
+  // current as voices auto-advance or are touched elsewhere.
+  if (panelSelected) refreshTouchPanel();
 
   // ---- Topbar button visibility ------------------------------------------
   // Random: show once the full roster is in. Conclude: show once everyone
