@@ -58,6 +58,8 @@
     #master-vol { width: 140px; }
     #tempo { width: 110px; }
     #tempo-value { display: inline-block; width: 28px; text-align: right; color: #aaa; }
+    #reverb { width: 100px; }
+    #reverb-value { display: inline-block; width: 32px; text-align: right; color: #aaa; }
     .topbar-spacer { flex: 1; }
     #conclude-btn, #random-btn {
       padding: 6px 14px;
@@ -110,6 +112,8 @@
       #master-vol { width: 90px; }
       #tempo { width: 70px; }
       #tempo-value { width: 22px; font-size: 11px; }
+      #reverb { width: 65px; }
+      #reverb-value { width: 26px; font-size: 11px; }
       #conclude-btn, #random-btn, #about-btn { padding: 5px 10px; font-size: 12px; }
       #help-btn { width: 24px; height: 24px; font-size: 12px; }
     }
@@ -296,6 +300,7 @@
     <div id="title">In C — Terry Riley</div>
     <label>volume <input id="master-vol" type="range" min="0" max="1" step="0.01" value="0.85"></label>
     <label>tempo <input id="tempo" type="range" min="60" max="200" step="1" value="120"> <span id="tempo-value">120</span></label>
+    <label>reverb <input id="reverb" type="range" min="0" max="1" step="0.01" value="0.25"> <span id="reverb-value">25%</span></label>
     <div class="topbar-spacer"></div>
     <button id="random-btn" hidden>Random</button>
     <button id="conclude-btn" hidden>Conclude</button>

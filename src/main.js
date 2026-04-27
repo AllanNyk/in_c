@@ -129,6 +129,8 @@ const ctx2d  = canvas.getContext('2d');
 const masterVolInput = document.getElementById('master-vol');
 const tempoInput     = document.getElementById('tempo');
 const tempoValueEl   = document.getElementById('tempo-value');
+const reverbInput    = document.getElementById('reverb');
+const reverbValueEl  = document.getElementById('reverb-value');
 const concludeBtn    = document.getElementById('conclude-btn');
 const randomBtn      = document.getElementById('random-btn');
 const helpBtn        = document.getElementById('help-btn');
@@ -183,6 +185,12 @@ masterVolInput.addEventListener('input', e => audio.setMasterGain(parseFloat(e.t
 tempoInput.addEventListener('input', e => {
   tempoBPM = parseInt(e.target.value, 10);
   tempoValueEl.textContent = tempoBPM;
+});
+
+reverbInput.addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  audio.setWetLevel(v);
+  reverbValueEl.textContent = `${Math.round(v * 100)}%`;
 });
 
 concludeBtn.addEventListener('click', () => {
