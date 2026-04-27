@@ -3,6 +3,11 @@
 
 import { midiToFilename } from './score.js';
 
+// Each scheduled note's gain is multiplied by a random factor in
+// [1 - VELOCITY_VARIATION/2, 1 + VELOCITY_VARIATION/2]. 0.16 = ±8%.
+// The ostinato is intentionally NOT randomized — it stays the metronomic spine.
+const VELOCITY_VARIATION = 0.16;
+
 export class Voice {
   constructor({ instrument, range, color, sustained, figures, audio, slotIndex }) {
     this.instrument = instrument;
@@ -154,7 +159,8 @@ export class Voice {
         if (t < now - 0.01) continue;
         const midi = n.midi + this.transposition;
         const file = midiToFilename(midi);
-        const noteGain = n.grace ? 0.55 : 1.0;
+        const baseGain = n.grace ? 0.55 : 1.0;
+        const noteGain = baseGain * (1 + (Math.random() - 0.5) * VELOCITY_VARIATION);
         const dur = this.sustained && n.duration != null
           ? n.duration * tempoFactor
           : null;
