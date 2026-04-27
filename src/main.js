@@ -153,7 +153,6 @@ const tpFigureRow    = touchPanel.querySelector('.tp-figure-row');
 const tpAlignBtn     = touchPanel.querySelector('.tp-align-btn');
 const tpLockBtn      = touchPanel.querySelector('.tp-lock-btn');
 const tpHideBtn      = touchPanel.querySelector('.tp-hide-btn');
-const tpDismissRow   = touchPanel.querySelector('.tp-dismiss-row');
 
 // Touch-panel selection state. selected: null | { kind: 'voice', idx } | { kind: 'ostinato' }
 let panelSelected = null;
@@ -442,7 +441,6 @@ function refreshTouchPanel() {
     tpAlignBtn.hidden = false;
     tpLockBtn.hidden = false;
     tpHideBtn.hidden = true;
-    tpDismissRow.hidden = !endingMode;
     setActive(touchPanel.querySelector('[data-action="mute"]'), v.muted);
     setActive(tpLockBtn, v.repeatLocked);
   } else if (panelSelected.kind === 'ostinato') {
@@ -456,7 +454,6 @@ function refreshTouchPanel() {
     tpAlignBtn.hidden = true;
     tpLockBtn.hidden = true;
     tpHideBtn.hidden = false;
-    tpDismissRow.hidden = !endingMode;
     setActive(touchPanel.querySelector('[data-action="mute"]'), ostinato.muted);
     setActive(tpHideBtn, ostinato.hidden);
   }
@@ -494,12 +491,6 @@ touchPanel.addEventListener('click', (e) => {
         }
         break;
       }
-      case 'dismiss': {
-        const isLast = ostinato.dismissed && voices.every(vx => vx === v || vx.dismissed);
-        v.dismiss(isLast ? 1.0 : 0.05);
-        closeTouchPanel();
-        return;
-      }
     }
   } else if (panelSelected.kind === 'ostinato') {
     switch (action) {
@@ -507,12 +498,6 @@ touchPanel.addEventListener('click', (e) => {
       case 'pitch-down': ostinato.shiftPitch(-1); break;
       case 'mute': ostinato.toggleMute(); break;
       case 'hide': ostinato.toggleHidden(); break;
-      case 'dismiss': {
-        const isLast = voices.every(v => v.dismissed);
-        ostinato.dismiss(isLast ? 1.0 : 0.05);
-        closeTouchPanel();
-        return;
-      }
     }
   }
   refreshTouchPanel();
