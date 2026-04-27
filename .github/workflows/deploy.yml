@@ -28,6 +28,7 @@ jobs:
           -mkdir webroots/www/in_c/assets/audio/cello
           -mkdir webroots/www/in_c/assets/audio/doublebass
           -mkdir webroots/www/in_c/assets/audio/crotales
+          -mkdir webroots/www/in_c/assets/audio/ir
           put index.html webroots/www/in_c/index.html
           put src/*.js webroots/www/in_c/src/
           -put assets/og_preview.png webroots/www/in_c/assets/og_preview.png
@@ -43,5 +44,6 @@ jobs:
           put assets/audio/cello/*.mp3 webroots/www/in_c/assets/audio/cello/
           put assets/audio/doublebass/*.mp3 webroots/www/in_c/assets/audio/doublebass/
           put assets/audio/crotales/*.mp3 webroots/www/in_c/assets/audio/crotales/
+          put assets/audio/ir/theatre41.wav webroots/www/in_c/assets/audio/ir/theatre41.wav
           bye
           SFTP

@@ -313,6 +313,7 @@ async function handleClick(x, y, opts) {
       audio.loadSample('piano', 'c4'),
       audio.loadSample('piano', 'c5'),
       audio.loadSample('piano', 'c6'),
+      audio.loadIR('assets/audio/ir/theatre41.wav').catch(err => console.error('IR load failed:', err)),
     ]);
     const t0 = audio.currentTime + 0.2;
     nextOstinatoTime = t0;

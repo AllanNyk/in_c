@@ -15,6 +15,30 @@ export class AudioEngine {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.85;
     this.master.connect(this.ctx.destination);
+
+    // Reverb send: master also feeds a convolver via a wetGain control.
+    // Until loadIR is called the convolver has no buffer and is silent, so
+    // the audio chain works as dry-only.
+    this.convolver = this.ctx.createConvolver();
+    this.wetGain = this.ctx.createGain();
+    this.wetGain.gain.value = 0.25;
+    this.master.connect(this.convolver);
+    this.convolver.connect(this.wetGain);
+    this.wetGain.connect(this.ctx.destination);
+  }
+
+  async loadIR(url) {
+    if (!this.ctx) return;
+    const arr = await fetch(url).then(r => {
+      if (!r.ok) throw new Error(`failed to fetch ${url}`);
+      return r.arrayBuffer();
+    });
+    const buf = await this.ctx.decodeAudioData(arr);
+    this.convolver.buffer = buf;
+  }
+
+  setWetLevel(v) {
+    if (this.wetGain) this.wetGain.gain.value = Math.max(0, Math.min(1, v));
   }
 
   setMasterGain(v) {
