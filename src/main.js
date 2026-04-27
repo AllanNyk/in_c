@@ -599,6 +599,21 @@ async function spawnNextVoice() {
   voices.push(voice);
   voice.preloadSamples().catch(err => console.error('preload failed:', err));
   showVoiceSpawnHint(voices.length);
+  updateAllVoicePans();
+}
+
+// Pan each voice based on its angular position around the ostinato — voices
+// on the right side of the ring pan right, voices on the left pan left,
+// top/bottom stay near center. Re-runs every spawn since adding a new voice
+// reflows everyone's angles. STEREO_WIDTH caps the maximum pan amount.
+const STEREO_WIDTH = 0.6;
+function updateAllVoicePans() {
+  const total = voices.length;
+  if (total === 0) return;
+  for (let i = 0; i < total; i++) {
+    const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
+    voices[i].setPan(Math.cos(angle) * STEREO_WIDTH);
+  }
 }
 
 // Per-voice intro hints — fired as a transient when each new voice spawns,

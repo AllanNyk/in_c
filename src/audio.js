@@ -46,11 +46,23 @@ export class AudioEngine {
   }
 
   // A "channel" is a per-voice gain node feeding the master bus.
+  // Used by the ostinato (mono, centered).
   createChannel(initialGain = 0.7) {
     const g = this.ctx.createGain();
     g.gain.value = initialGain;
     g.connect(this.master);
     return g;
+  }
+
+  // Same as createChannel but adds a StereoPannerNode between gain and master,
+  // so each voice can be placed in the stereo field. Returns { gain, panner }.
+  createPannedChannel(initialGain = 0.7, pan = 0) {
+    const g = this.ctx.createGain();
+    g.gain.value = initialGain;
+    const p = this.ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    g.connect(p).connect(this.master);
+    return { gain: g, panner: p };
   }
 
   async loadSample(instrument, note) {

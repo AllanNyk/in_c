@@ -13,7 +13,9 @@ export class Voice {
     this.audio = audio;
     this.slotIndex = slotIndex;   // for stable ordering / placement
 
-    this.channel = audio.createChannel(0.0); // start silent, ramp up on spawn
+    const ch = audio.createPannedChannel(0.0, 0); // start silent + centered, ramp up on spawn
+    this.channel = ch.gain;
+    this.panner = ch.panner;
     this.gain = 0.7;
     this.muted = false;
     this.channel.gain.linearRampToValueAtTime(this.gain, audio.currentTime + 0.4);
@@ -80,6 +82,14 @@ export class Voice {
   toggleMute() { this.setMuted(!this.muted); }
 
   toggleRepeat() { this.repeatLocked = !this.repeatLocked; }
+
+  setPan(p) {
+    if (!this.panner) return;
+    const target = Math.max(-1, Math.min(1, p));
+    const t = this.audio.currentTime;
+    this.panner.pan.cancelScheduledValues(t);
+    this.panner.pan.setTargetAtTime(target, t, 0.08); // smooth re-pan
+  }
 
   // Permanently remove this voice from the ensemble. The visual disappears
   // immediately, but audio continues to fade for a tail (set the time constant
