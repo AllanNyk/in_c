@@ -166,8 +166,14 @@ export class Voice {
       const pat = this.currentPattern;
       if (!pat) break;
       const now = this.audio.currentTime;
+      const jitterMax = this.sustained ? TIMING_JITTER_SUSTAINED : TIMING_JITTER_PERCUSSIVE;
       for (const n of pat.notes) {
-        const t = this.nextLoopStart + n.time * tempoFactor;
+        const baseTime = this.nextLoopStart + n.time * tempoFactor;
+        // Per-note timing jitter — small enough to humanize without breaking
+        // the polyrhythmic interlock. Loop boundaries (nextLoopStart) stay
+        // on the grid; only individual onsets wobble.
+        const jitter = (Math.random() - 0.5) * 2 * jitterMax;
+        const t = baseTime + jitter;
         if (t < now - 0.01) continue;
         const midi = n.midi + this.transposition;
         const file = midiToFilename(midi);
@@ -176,7 +182,7 @@ export class Voice {
         const dur = this.sustained && n.duration != null
           ? n.duration * tempoFactor
           : null;
-        this.audio.scheduleNote(this.channel, this.instrument, file, t, noteGain, dur);
+        this.audio.scheduleNote(this.channel, this.instrument, file, t, noteGain, dur, undefined, this.detuneCents);
         if (!n.grace) {
           if (t > this.lastOnsetTime) this.lastOnsetTime = t;
           newOnsets.push(t);
