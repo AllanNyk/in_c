@@ -139,6 +139,9 @@ const helpClose      = helpModal.querySelector('.help-close');
 const aboutBtn       = document.getElementById('about-btn');
 const aboutModal     = document.getElementById('about-modal');
 const aboutClose     = aboutModal.querySelector('.about-close');
+const endgameActions = document.getElementById('endgame-actions');
+const downloadBtn    = document.getElementById('download-btn');
+const resetBtn       = document.getElementById('reset-btn');
 const touchPanel     = document.getElementById('touch-panel');
 const tpName         = touchPanel.querySelector('.tp-name');
 const tpSub          = touchPanel.querySelector('.tp-sub');
@@ -159,6 +162,14 @@ let panelSelected = null;
 let everHovered = false;
 let everPressedRandomize = false;
 let dismantleCompleteTime = -1; // audio time when ostinato + every voice were dismissed
+
+// Performance log — every spawn / figure change / dismiss is recorded so the
+// end-of-piece mandala can trace each voice's journey through the score.
+const performanceLog = [];
+let performanceStartTime = 0;
+function logEvent(type, data) {
+  performanceLog.push({ t: audio.currentTime, type, ...data });
+}
 
 // Transient one-line message, used to give feedback for actions that silently
 // failed (e.g. click-to-spawn during cooldown). Cleared automatically by render.
@@ -327,6 +338,7 @@ async function handleClick(x, y, opts) {
     nextOstinatoTime = t0;
     ostinatoStartTime = t0;
     lastSpawnTime = audio.currentTime;
+    performanceStartTime = audio.currentTime;
     started = true;
     await spawnNextVoice();
     return;
@@ -343,12 +355,14 @@ async function handleClick(x, y, opts) {
       const v = voices[hit.idx];
       const isLast = ostinato.dismissed && voices.every(vx => vx === v || vx.dismissed);
       v.dismiss(isLast ? 1.0 : 0.05);
+      logEvent('dismiss', { kind: 'voice', voiceIdx: hit.idx });
       if (panelSelected && panelSelected.kind === 'voice' && panelSelected.idx === hit.idx) closeTouchPanel();
       return;
     }
     if (hit && hit.kind === 'ostinato') {
       const isLast = voices.every(v => v.dismissed);
       ostinato.dismiss(isLast ? 1.0 : 0.05);
+      logEvent('dismiss', { kind: 'ostinato' });
       if (panelSelected && panelSelected.kind === 'ostinato') closeTouchPanel();
       return;
     }
@@ -598,9 +612,35 @@ async function spawnNextVoice() {
   voice.nextLoopStart = alignToOstinatoGrid(audio.currentTime + 0.3);
   voices.push(voice);
   voice.preloadSamples().catch(err => console.error('preload failed:', err));
+  logEvent('spawn', { voiceIdx: slot, instrument: cfg.instrument, color: cfg.color });
   showVoiceSpawnHint(voices.length);
   updateAllVoicePans();
 }
+
+// Lightweight figure-change tracker. Polls active voices a few times a second
+// and logs a 'figure' event whenever a voice's patternIdx has shifted since
+// the last tick. Cheaper than wrapping every advance() call site.
+setInterval(() => {
+  if (!started) return;
+  for (let i = 0; i < voices.length; i++) {
+    const v = voices[i];
+    if (v.dismissed) continue;
+    if (v._lastLoggedFigure !== v.patternIdx) {
+      logEvent('figure', { voiceIdx: i, patternIdx: v.patternIdx });
+      v._lastLoggedFigure = v.patternIdx;
+    }
+  }
+}, 400);
+
+// Endgame buttons: download the current canvas as PNG, or reload to start over.
+downloadBtn.addEventListener('click', () => {
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `in_c_mandala_${stamp}.png`;
+  a.click();
+});
+resetBtn.addEventListener('click', () => location.reload());
 
 // Pan each voice based on its angular position around the ostinato — voices
 // on the right side of the ring pan right, voices on the left pan left,
@@ -1140,22 +1180,34 @@ function render() {
       const elapsed = now - dismantleCompleteTime;
       const fade = Math.max(0, Math.min(1, (elapsed - FADE_DELAY) / FADE_DURATION));
       if (fade > 0) {
-        // Curtain is showing — clear the rest of the UI so only the title
-        // and subtitle remain on the canvas.
+        // Curtain is showing — hide the rest of the UI; show endgame buttons.
         if (!topbar.hidden) topbar.hidden = true;
         if (!touchPanel.hidden) touchPanel.hidden = true;
+        if (endgameActions.hidden && fade > 0.4) endgameActions.hidden = false;
+
+        // Layout: title up top, mandala in the middle, subtitle below.
+        const mandalaRadius = Math.min(w, h) * (w < 480 ? 0.32 : 0.28);
         ctx2d.textAlign = 'center';
         const titleRGB = bgValue > 160 ? '68, 68, 68' : '221, 221, 221';
         const subRGB   = bgValue > 160 ? '136, 136, 136' : '187, 187, 187';
-        const titleSize = w < 480 ? 44 : 64;
-        const subSize   = w < 480 ? 16 : 20;
-        const gap       = w < 480 ? 60 : 80; // baseline-to-baseline
+        const titleSize = w < 480 ? 36 : 48;
+        const subSize   = w < 480 ? 14 : 18;
+
+        // Mandala (faded in with the curtain)
+        ctx2d.save();
+        ctx2d.globalAlpha = fade;
+        drawMandala(cx, cy, mandalaRadius, bgValue > 160);
+        ctx2d.restore();
+
+        // Title above mandala
         ctx2d.fillStyle = `rgba(${titleRGB}, ${fade})`;
         ctx2d.font = `600 ${titleSize}px system-ui, sans-serif`;
-        ctx2d.fillText('In C.', cx, cy - gap / 2);
+        ctx2d.fillText('In C.', cx, cy - mandalaRadius - 24);
+
+        // Subtitle below mandala
         ctx2d.fillStyle = `rgba(${subRGB}, ${fade})`;
         ctx2d.font = `${subSize}px system-ui, sans-serif`;
-        ctx2d.fillText('thank you for playing', cx, cy + gap / 2);
+        ctx2d.fillText('thank you for playing', cx, cy + mandalaRadius + 36);
       }
     } else if (voices.every(v => v.dismissed || v.atEnd)) {
       const hintCol = bgValue > 160 ? '#888' : '#ccc';
@@ -1208,6 +1260,81 @@ function drawWrappedText(text, anchorX, baselineY, maxWidth) {
   for (let i = 0; i < lines.length; i++) {
     ctx2d.fillText(lines[i], anchorX, topY + i * lineHeight);
   }
+}
+
+// Generative print of the just-finished performance. For each spawned voice
+// we draw a thin radial wedge from center outward; the wedge is broken into
+// arc-segments that color-shift with the figure each voice was on at that
+// time. Inner radius = spawn time, outer = end of performance. The whole
+// figure becomes a circular journey-record — petals around a central dot,
+// length ≈ time present, color progression ≈ figures traversed.
+function drawMandala(cx, cy, radius, isLightBg) {
+  const totalDuration = audio.currentTime - performanceStartTime;
+  if (totalDuration <= 0.5) return;
+  const N = ROSTER.length;
+  const slotSpan = (Math.PI * 2) / N;
+  const wedgeWidth = slotSpan * 0.55; // small gap between petals
+
+  // Faint concentric tick rings every ~30 s so duration is felt
+  const tickInterval = 30; // seconds
+  const ringAlpha = isLightBg ? 0.06 : 0.12;
+  ctx2d.strokeStyle = isLightBg ? `rgba(0,0,0,${ringAlpha})` : `rgba(255,255,255,${ringAlpha})`;
+  ctx2d.lineWidth = 1;
+  for (let t = tickInterval; t < totalDuration; t += tickInterval) {
+    const r = (t / totalDuration) * radius;
+    ctx2d.beginPath();
+    ctx2d.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx2d.stroke();
+  }
+
+  // Per-voice petals
+  const spawns = performanceLog.filter(e => e.type === 'spawn');
+  for (const spawn of spawns) {
+    const i = spawn.voiceIdx;
+    const slotAngle = (i / N) * Math.PI * 2 - Math.PI / 2;
+    const a1 = slotAngle - wedgeWidth / 2;
+    const a2 = slotAngle + wedgeWidth / 2;
+
+    // Build the time-ordered list of (start, figure) segments for this voice.
+    const figures = performanceLog.filter(e => e.type === 'figure' && e.voiceIdx === i);
+    const dismiss = performanceLog.find(e => e.type === 'dismiss' && e.kind === 'voice' && e.voiceIdx === i);
+    const endTime = dismiss ? dismiss.t : audio.currentTime;
+    const segments = [];
+    if (figures.length === 0) {
+      segments.push({ start: spawn.t, end: endTime, fig: 0 });
+    } else {
+      for (let j = 0; j < figures.length; j++) {
+        const fStart = figures[j].t;
+        const fEnd = (j + 1 < figures.length) ? figures[j + 1].t : endTime;
+        segments.push({ start: fStart, end: fEnd, fig: figures[j].patternIdx });
+      }
+      // Pre-figure-log slice from spawn → first log entry
+      if (figures[0].t > spawn.t) {
+        segments.unshift({ start: spawn.t, end: figures[0].t, fig: 0 });
+      }
+    }
+
+    for (const seg of segments) {
+      const r1 = ((seg.start - performanceStartTime) / totalDuration) * radius;
+      const r2 = ((seg.end - performanceStartTime) / totalDuration) * radius;
+      if (r2 <= r1 + 0.5) continue;
+      const figProg = seg.fig / 52;
+      const sat = 55 + figProg * 35;
+      const light = isLightBg ? (58 - figProg * 18) : (50 + figProg * 18);
+      ctx2d.fillStyle = `hsl(${spawn.color}, ${sat}%, ${light}%)`;
+      ctx2d.beginPath();
+      ctx2d.arc(cx, cy, r2, a1, a2);
+      ctx2d.arc(cx, cy, r1, a2, a1, true);
+      ctx2d.closePath();
+      ctx2d.fill();
+    }
+  }
+
+  // Center dot — the ostinato's shadow
+  ctx2d.fillStyle = isLightBg ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
+  ctx2d.beginPath();
+  ctx2d.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx2d.fill();
 }
 
 // Walks the player through discovery one prompt at a time. Each hint is shown

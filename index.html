@@ -293,6 +293,32 @@
       font-size: 11px;
       color: #aaa;
     }
+
+    #endgame-actions {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 14px;
+      z-index: 90;
+    }
+    #endgame-actions[hidden] { display: none; }
+    #endgame-actions button {
+      padding: 10px 22px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font: inherit;
+      font-size: 13px;
+      color: #444;
+      cursor: pointer;
+    }
+    #endgame-actions button:hover { background: #f5f5f5; }
+    @media (max-width: 480px) {
+      #endgame-actions { bottom: 18px; }
+      #endgame-actions button { padding: 8px 14px; font-size: 12px; }
+    }
   </style>
 </head>
 <body>
@@ -360,6 +386,10 @@
 
       <p class="esc-hint">Press <kbd>Esc</kbd> or click outside to close.</p>
     </div>
+  </div>
+  <div id="endgame-actions" hidden>
+    <button id="download-btn" type="button">Download mandala</button>
+    <button id="reset-btn" type="button">Start over</button>
   </div>
   <div id="touch-panel" hidden>
     <div class="tp-header">
