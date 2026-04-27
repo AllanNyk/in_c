@@ -14,7 +14,21 @@ export class AudioEngine {
     this.ctx = new AC();
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.85;
-    this.master.connect(this.ctx.destination);
+
+    // Master bus compressor — gentle gluing of the ensemble dynamics so the
+    // overall sound feels "produced" rather than raw samples stacked together.
+    // Mastering-style settings: soft knee, moderate ratio, fast-ish attack,
+    // medium release. Final stage before the destination — both dry and wet
+    // (reverb) signals route through it.
+    this.compressor = this.ctx.createDynamicsCompressor();
+    this.compressor.threshold.value = -18;  // dB
+    this.compressor.knee.value = 12;        // soft entry
+    this.compressor.ratio.value = 3;        // moderate
+    this.compressor.attack.value = 0.005;   // 5 ms — catch transients
+    this.compressor.release.value = 0.150;  // 150 ms — natural decay
+    this.compressor.connect(this.ctx.destination);
+
+    this.master.connect(this.compressor);
 
     // Reverb send: master also feeds a convolver via a wetGain control.
     // Until loadIR is called the convolver has no buffer and is silent, so
@@ -24,7 +38,7 @@ export class AudioEngine {
     this.wetGain.gain.value = 0.25;
     this.master.connect(this.convolver);
     this.convolver.connect(this.wetGain);
-    this.wetGain.connect(this.ctx.destination);
+    this.wetGain.connect(this.compressor);
   }
 
   async loadIR(url) {
@@ -55,13 +69,35 @@ export class AudioEngine {
   }
 
   // Same as createChannel but adds a StereoPannerNode between gain and master,
-  // so each voice can be placed in the stereo field. Returns { gain, panner }.
-  createPannedChannel(initialGain = 0.7, pan = 0) {
+  // so each voice can be placed in the stereo field. Optional eq config:
+  //   { highpass: HZ, presence: { freq, gain } }
+  // Highpass cleans sub-bass mud; presence is a peaking-EQ boost for air.
+  // Returns { gain, panner }. Chain: gain → [hp] → [presence] → panner → master.
+  createPannedChannel(initialGain = 0.7, pan = 0, eq = null) {
     const g = this.ctx.createGain();
     g.gain.value = initialGain;
+    let tail = g;
+    if (eq && eq.highpass) {
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = eq.highpass;
+      hp.Q.value = 0.707; // Butterworth — gentle slope, no resonant peak
+      tail.connect(hp);
+      tail = hp;
+    }
+    if (eq && eq.presence) {
+      const pres = this.ctx.createBiquadFilter();
+      pres.type = 'peaking';
+      pres.frequency.value = eq.presence.freq;
+      pres.gain.value = eq.presence.gain;
+      pres.Q.value = 1.0;
+      tail.connect(pres);
+      tail = pres;
+    }
     const p = this.ctx.createStereoPanner();
     p.pan.value = Math.max(-1, Math.min(1, pan));
-    g.connect(p).connect(this.master);
+    tail.connect(p);
+    p.connect(this.master);
     return { gain: g, panner: p };
   }
 

@@ -29,7 +29,12 @@ export class Voice {
     this.audio = audio;
     this.slotIndex = slotIndex;   // for stable ordering / placement
 
-    const ch = audio.createPannedChannel(0.0, 0); // start silent + centered, ramp up on spawn
+    // Per-voice EQ: high-pass to clean sub-bass mud (lower frequency for low
+    // instruments so their fundamentals come through), plus a gentle presence
+    // boost around 4 kHz to add air without sounding hyped.
+    const hpFreq = range[0] < 48 ? 30 : 80; // low instruments (cello/bass) need lower cutoff
+    const eq = { highpass: hpFreq, presence: { freq: 4000, gain: 1.5 } };
+    const ch = audio.createPannedChannel(0.0, 0, eq);
     this.channel = ch.gain;
     this.panner = ch.panner;
     this.gain = 0.7;
