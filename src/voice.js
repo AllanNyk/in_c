@@ -81,13 +81,25 @@ export class Voice {
 
   toggleRepeat() { this.repeatLocked = !this.repeatLocked; }
 
-  // Permanently remove this voice from the ensemble (used during the dismantling
-  // ending). Mutes (with fade) and flags as dismissed so render and scheduler
-  // both skip it. No re-undo.
-  dismiss() {
+  // Permanently remove this voice from the ensemble. The visual disappears
+  // immediately, but audio continues to fade for a tail (set the time constant
+  // higher for a longer audible trail — e.g. timeConstant=1.0 ≈ 3s perceived).
+  dismiss(timeConstant = 0.05) {
     if (this.dismissed) return;
-    this.setMuted(true);
     this.dismissed = true;
+    this.muted = true;
+    this.dismissAudibleUntil = this.audio.currentTime + timeConstant * 5;
+    if (this.channel) {
+      const t = this.audio.currentTime;
+      this.channel.gain.cancelScheduledValues(t);
+      this.channel.gain.setTargetAtTime(0, t, timeConstant);
+    }
+  }
+
+  // Voice keeps producing audio while its dismiss-fade tail is still audible.
+  get audible() {
+    if (!this.dismissed) return true;
+    return this.audio.currentTime < this.dismissAudibleUntil;
   }
 
   // Move forward/backward in the score by `steps` patterns.

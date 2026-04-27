@@ -96,10 +96,20 @@ const ostinato = {
   },
   toggleMute() { this.setMuted(!this.muted); },
   toggleHidden() { this.hidden = !this.hidden; },
-  dismiss() {
+  dismiss(timeConstant = 0.05) {
     if (this.dismissed) return;
-    this.setMuted(true);
     this.dismissed = true;
+    this.muted = true;
+    this.dismissAudibleUntil = audio.currentTime + timeConstant * 5;
+    if (this.channel) {
+      const t = audio.currentTime;
+      this.channel.gain.cancelScheduledValues(t);
+      this.channel.gain.setTargetAtTime(0, t, timeConstant);
+    }
+  },
+  get audible() {
+    if (!this.dismissed) return true;
+    return audio.currentTime < this.dismissAudibleUntil;
   },
   shiftPitch(direction) {
     const next = this.midi + direction * OSTINATO_PITCH_STEP;
@@ -316,14 +326,20 @@ async function handleClick(x, y, opts) {
   const hit = opts.hitOverride !== undefined ? opts.hitOverride : findHover(x, y);
 
   // Dismantling phase: any left-click/tap dismisses the targeted part forever.
+  // The very last dismissal (the click that empties the canvas) gets a long
+  // 3-second audible trail; earlier dismissals fade quickly so the player
+  // can move at their own pace.
   if (endingMode && opts.button === 0) {
     if (hit && hit.kind === 'voice') {
-      voices[hit.idx].dismiss();
+      const v = voices[hit.idx];
+      const isLast = ostinato.dismissed && voices.every(vx => vx === v || vx.dismissed);
+      v.dismiss(isLast ? 1.0 : 0.05);
       if (panelSelected && panelSelected.kind === 'voice' && panelSelected.idx === hit.idx) closeTouchPanel();
       return;
     }
     if (hit && hit.kind === 'ostinato') {
-      ostinato.dismiss();
+      const isLast = voices.every(v => v.dismissed);
+      ostinato.dismiss(isLast ? 1.0 : 0.05);
       if (panelSelected && panelSelected.kind === 'ostinato') closeTouchPanel();
       return;
     }
@@ -455,7 +471,12 @@ touchPanel.addEventListener('click', (e) => {
         }
         break;
       }
-      case 'dismiss': v.dismiss(); closeTouchPanel(); return;
+      case 'dismiss': {
+        const isLast = ostinato.dismissed && voices.every(vx => vx === v || vx.dismissed);
+        v.dismiss(isLast ? 1.0 : 0.05);
+        closeTouchPanel();
+        return;
+      }
     }
   } else if (panelSelected.kind === 'ostinato') {
     switch (action) {
@@ -463,8 +484,12 @@ touchPanel.addEventListener('click', (e) => {
       case 'pitch-down': ostinato.shiftPitch(-1); break;
       case 'mute': ostinato.toggleMute(); break;
       case 'hide': ostinato.toggleHidden(); break;
-      case 'dismiss': ostinato.dismiss(); closeTouchPanel(); return;
-    }
+      case 'dismiss': {
+        const isLast = voices.every(v => v.dismissed);
+        ostinato.dismiss(isLast ? 1.0 : 0.05);
+        closeTouchPanel();
+        return;
+      }
   }
   refreshTouchPanel();
 });
@@ -612,7 +637,7 @@ setInterval(() => {
   const horizon = audio.currentTime + SCHEDULER_LOOKAHEAD;
 
   while (nextOstinatoTime < horizon) {
-    if (!ostinato.dismissed) {
+    if (ostinato.audible) {
       audio.scheduleNote(ostinato.channel, 'piano', ostinato.noteFilename, nextOstinatoTime, 1.0);
       ostinato.lastOnsetTime = nextOstinatoTime;
       recentOstinatoOnsets.push(nextOstinatoTime);
@@ -624,7 +649,7 @@ setInterval(() => {
   const tf = tempoFactor();
   for (let i = 0; i < voices.length; i++) {
     const v = voices[i];
-    if (v.dismissed) continue;
+    if (!v.audible) continue; // dismissed AND its fade tail is finished
     const newOnsets = v.scheduleUpTo(horizon, tf);
     if (v.muted) continue; // muted voices don't seed sparkles
     for (const t of newOnsets) {
@@ -1090,6 +1115,10 @@ function render() {
       const elapsed = now - dismantleCompleteTime;
       const fade = Math.max(0, Math.min(1, (elapsed - FADE_DELAY) / FADE_DURATION));
       if (fade > 0) {
+        // Curtain is showing — clear the rest of the UI so only the title
+        // and subtitle remain on the canvas.
+        if (!topbar.hidden) topbar.hidden = true;
+        if (!touchPanel.hidden) touchPanel.hidden = true;
         ctx2d.textAlign = 'center';
         const titleRGB = bgValue > 160 ? '68, 68, 68' : '221, 221, 221';
         const subRGB   = bgValue > 160 ? '136, 136, 136' : '187, 187, 187';
