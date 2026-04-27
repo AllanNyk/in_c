@@ -1112,9 +1112,7 @@ function render() {
     // Fade the figure number when the circle gets too small to hold the text.
     const textAlpha = Math.min(1, Math.max(0, (r - 8) / 10));
     if (textAlpha > 0) {
-      ctx2d.fillStyle = v.muted
-        ? voiceColor(v).replace(/hsla?\(([^)]*)\)/, (_, body) => `hsla(${body.replace(/,\s*[\d.]+\s*\)?$/, '')}, ${textAlpha})`)
-        : `rgba(255, 255, 255, ${textAlpha})`;
+      ctx2d.fillStyle = v.muted ? voiceColor(v, textAlpha) : `rgba(255, 255, 255, ${textAlpha})`;
       ctx2d.font = 'bold 12px system-ui, sans-serif';
       ctx2d.textAlign = 'center';
       ctx2d.textBaseline = 'middle';
