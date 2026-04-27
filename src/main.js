@@ -1028,7 +1028,7 @@ function render() {
       continue;
     }
     const t = 1 - dt / SPARKLE_LIFE;
-    const radius = 2 + t * 5;
+    const radius = 1 + t * 2.5;
     const alpha = t;
     const hue = s.hue ?? 250;
     // light halo
@@ -1066,7 +1066,6 @@ function render() {
         transientMessage = null;
       } else {
         hintText = transientMessage.text;
-        // Hold full alpha for first half, fade out for second half
         const t = dt / transientMessage.life;
         hintAlpha = t < 0.5 ? 1.0 : Math.max(0, 1 - (t - 0.5) * 2);
       }
@@ -1077,9 +1076,7 @@ function render() {
         ? `rgba(120, 120, 120, ${hintAlpha})`
         : `rgba(220, 220, 220, ${hintAlpha})`;
       ctx2d.fillStyle = hintCol;
-      ctx2d.font = '24px system-ui, sans-serif';
-      ctx2d.textAlign = 'center';
-      ctx2d.fillText(hintText, cx, h - 36);
+      drawWrappedText(hintText, cx, h - 26, w - 32);
     }
   }
 
@@ -1088,8 +1085,6 @@ function render() {
     const allDismantled = ostinato.dismissed && voices.every(v => v.dismissed);
     if (allDismantled) {
       if (dismantleCompleteTime < 0) dismantleCompleteTime = now;
-      // Hold a 2-second silence after the last part disappears, then fade in
-      // the curtain over ~2.5 seconds.
       const FADE_DELAY = 2.0;
       const FADE_DURATION = 2.5;
       const elapsed = now - dismantleCompleteTime;
@@ -1098,19 +1093,20 @@ function render() {
         ctx2d.textAlign = 'center';
         const titleRGB = bgValue > 160 ? '68, 68, 68' : '221, 221, 221';
         const subRGB   = bgValue > 160 ? '136, 136, 136' : '187, 187, 187';
+        const titleSize = w < 480 ? 44 : 64;
+        const subSize   = w < 480 ? 16 : 20;
+        const gap       = w < 480 ? 60 : 80; // baseline-to-baseline
         ctx2d.fillStyle = `rgba(${titleRGB}, ${fade})`;
-        ctx2d.font = '600 64px system-ui, sans-serif';
-        ctx2d.fillText('In C.', cx, cy - 24);
+        ctx2d.font = `600 ${titleSize}px system-ui, sans-serif`;
+        ctx2d.fillText('In C.', cx, cy - gap / 2);
         ctx2d.fillStyle = `rgba(${subRGB}, ${fade})`;
-        ctx2d.font = '20px system-ui, sans-serif';
-        ctx2d.fillText('thank you for playing', cx, cy + 56);
+        ctx2d.font = `${subSize}px system-ui, sans-serif`;
+        ctx2d.fillText('thank you for playing', cx, cy + gap / 2);
       }
     } else if (voices.every(v => v.dismissed || v.atEnd)) {
       const hintCol = bgValue > 160 ? '#888' : '#ccc';
       ctx2d.fillStyle = hintCol;
-      ctx2d.font = '24px system-ui, sans-serif';
-      ctx2d.textAlign = 'center';
-      ctx2d.fillText('click each voice and the ostinato to dismantle the piece', cx, h - 76);
+      drawWrappedText('click each voice and the ostinato to dismantle the piece', cx, h - 70, w - 32);
     }
   }
 
@@ -1129,6 +1125,35 @@ function render() {
   if (concludeBtn.hidden === concludeShown) concludeBtn.hidden = !concludeShown;
 
   requestAnimationFrame(render);
+}
+
+// Draws hint text centered at (anchorX, baselineY), responsive: shrinks the
+// font for narrow canvases and wraps onto multiple lines when needed. Lines
+// stack upward so the bottom line sits at baselineY.
+function drawWrappedText(text, anchorX, baselineY, maxWidth) {
+  const w = canvas.width;
+  const fontSize = w < 480 ? 14 : (w < 720 ? 18 : 24);
+  ctx2d.font = `${fontSize}px system-ui, sans-serif`;
+  ctx2d.textAlign = 'center';
+  // Wrap by greedy word fit
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx2d.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  const lineHeight = fontSize * 1.3;
+  const topY = baselineY - (lines.length - 1) * lineHeight;
+  for (let i = 0; i < lines.length; i++) {
+    ctx2d.fillText(lines[i], anchorX, topY + i * lineHeight);
+  }
 }
 
 // Walks the player through discovery one prompt at a time. Each hint is shown
