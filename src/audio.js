@@ -21,7 +21,7 @@ export class AudioEngine {
     this.eqBass = this.ctx.createBiquadFilter();
     this.eqBass.type = 'lowshelf';
     this.eqBass.frequency.value = 200;
-    this.eqBass.gain.value = 0;
+    this.eqBass.gain.value = 6; // +6 dB default — gentle warmth
 
     this.eqMid = this.ctx.createBiquadFilter();
     this.eqMid.type = 'peaking';

@@ -76,7 +76,7 @@ const OSTINATO_PITCH_STEP = 12; // octave
 
 const ostinato = {
   channel: null,
-  gain: 0.35,
+  gain: 0.20,
   muted: false,
   hidden: false,                       // visual-only hide; audio keeps playing
   dismissed: false,                    // permanent removal during the dismantling end
