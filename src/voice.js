@@ -8,6 +8,17 @@ import { midiToFilename } from './score.js';
 // The ostinato is intentionally NOT randomized — it stays the metronomic spine.
 const VELOCITY_VARIATION = 0.16;
 
+// Per-note timing jitter. Sustained instruments (winds, bowed strings) get a
+// wider window — humans breathe before notes — while percussive attacks stay
+// tighter so the rhythmic grid remains felt.
+const TIMING_JITTER_PERCUSSIVE = 0.005; // ±5 ms
+const TIMING_JITTER_SUSTAINED  = 0.010; // ±10 ms
+
+// Per-voice detune range. Each voice draws a stable random offset in
+// [-DETUNE_RANGE/2, +DETUNE_RANGE/2] cents at spawn. When two voices land
+// on the same note, the slight difference creates natural beating.
+const DETUNE_RANGE = 10; // ±5 cents
+
 export class Voice {
   constructor({ instrument, range, color, sustained, figures, audio, slotIndex }) {
     this.instrument = instrument;
@@ -34,6 +45,7 @@ export class Voice {
     this.patternStartTime = audio.currentTime;
     this.repeatLocked = false;    // true = stay on current figure; ignore auto-advance
     this.dismissed = false;       // true = dismantled at the end; gone from render + audio
+    this.detuneCents = (Math.random() - 0.5) * DETUNE_RANGE; // stable per voice
 
     this._fitTransposition();
   }

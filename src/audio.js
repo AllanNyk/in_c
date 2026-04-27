@@ -89,12 +89,13 @@ export class AudioEngine {
   // `when + duration`, then linearly releases to 0 over `releaseTime`, and
   // stops the source. Without `duration`, the sample plays its full natural
   // length (right behavior for percussive samples with intrinsic decay).
-  scheduleNote(channel, instrument, note, when, gain = 1.0, duration = null, releaseTime = 0.01) {
+  scheduleNote(channel, instrument, note, when, gain = 1.0, duration = null, releaseTime = 0.01, detuneCents = 0) {
     const key = `${instrument}:${note}`;
     const buf = this.buffers.get(key);
     if (!buf) return null;
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
+    if (detuneCents) src.detune.value = detuneCents;
     const noteGain = this.ctx.createGain();
     if (duration != null) {
       const stopAt = when + duration + releaseTime;
