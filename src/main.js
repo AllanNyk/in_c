@@ -211,6 +211,19 @@ eqBassInput.addEventListener('input',   e => audio.setEqBass(parseFloat(e.target
 eqMidInput.addEventListener('input',    e => audio.setEqMid(parseFloat(e.target.value)));
 eqTrebleInput.addEventListener('input', e => audio.setEqTreble(parseFloat(e.target.value)));
 
+// Force the visual slider positions to match the HTML defaults — Firefox /
+// Chrome restore previous values from session cache otherwise, leaving the
+// thumb in the wrong spot even though the audio engine starts at the right
+// numbers.
+masterVolInput.value = 0.85;
+tempoInput.value     = 120;
+reverbInput.value    = 0.25;
+eqBassInput.value    = 6;
+eqMidInput.value     = 0;
+eqTrebleInput.value  = 0;
+tempoValueEl.textContent  = '120';
+reverbValueEl.textContent = '25%';
+
 concludeBtn.addEventListener('click', () => {
   if (!started) return;
   endingMode = true;

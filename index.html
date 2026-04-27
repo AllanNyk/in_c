@@ -190,7 +190,7 @@
       display: flex; align-items: center; gap: 8px;
     }
     #touch-panel .tp-vol-label { font-size: 11px; color: #888; min-width: 28px; }
-    #touch-panel .tp-vol input[type="range"] { flex: 1; }
+    #touch-panel .tp-vol input[type="range" autocomplete="off"] { flex: 1; }
 
     #help-modal, #about-modal {
       position: fixed; inset: 0;
@@ -329,12 +329,12 @@
 <body>
   <div id="topbar">
     <div id="title">In C — Terry Riley</div>
-    <label>volume <input id="master-vol" type="range" min="0" max="1" step="0.01" value="0.85"></label>
-    <label>tempo <input id="tempo" type="range" min="60" max="200" step="1" value="120"> <span id="tempo-value">120</span></label>
-    <label>reverb <input id="reverb" type="range" min="0" max="1" step="0.01" value="0.25"> <span id="reverb-value">25%</span></label>
-    <label title="Bass shelf at 200 Hz">bass <input class="eq-slider" id="eq-bass" type="range" min="-12" max="12" step="0.5" value="6"></label>
-    <label title="Mid peaking at 1 kHz">mid <input class="eq-slider" id="eq-mid" type="range" min="-12" max="12" step="0.5" value="0"></label>
-    <label title="Treble shelf at 4 kHz">treble <input class="eq-slider" id="eq-treble" type="range" min="-12" max="12" step="0.5" value="0"></label>
+    <label>volume <input id="master-vol" type="range" autocomplete="off" min="0" max="1" step="0.01" value="0.85"></label>
+    <label>tempo <input id="tempo" type="range" autocomplete="off" min="60" max="200" step="1" value="120"> <span id="tempo-value">120</span></label>
+    <label>reverb <input id="reverb" type="range" autocomplete="off" min="0" max="1" step="0.01" value="0.25"> <span id="reverb-value">25%</span></label>
+    <label title="Bass shelf at 200 Hz">bass <input class="eq-slider" id="eq-bass" type="range" autocomplete="off" min="-12" max="12" step="0.5" value="6"></label>
+    <label title="Mid peaking at 1 kHz">mid <input class="eq-slider" id="eq-mid" type="range" autocomplete="off" min="-12" max="12" step="0.5" value="0"></label>
+    <label title="Treble shelf at 4 kHz">treble <input class="eq-slider" id="eq-treble" type="range" autocomplete="off" min="-12" max="12" step="0.5" value="0"></label>
     <div class="topbar-spacer"></div>
     <button id="random-btn" hidden>Random</button>
     <button id="conclude-btn" hidden>Conclude</button>
@@ -421,7 +421,7 @@
     </div>
     <div class="tp-row tp-vol">
       <span class="tp-vol-label">vol</span>
-      <input type="range" class="tp-volume" min="0" max="1" step="0.01">
+      <input type="range" autocomplete="off" class="tp-volume" min="0" max="1" step="0.01">
     </div>
     <div class="tp-row tp-toggle-row">
       <button type="button" class="tp-btn" data-action="mute">Mute</button>
