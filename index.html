@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>In C — interactive realization of Terry Riley's piece</title>
 
   <!-- SEO -->
@@ -37,6 +37,8 @@
       background: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       color: #444;
+      touch-action: manipulation; /* belt-and-suspenders: disables double-tap zoom */
+      -webkit-touch-callout: none; /* no long-press popover on iOS */
     }
     canvas {
       display: block;

@@ -265,6 +265,15 @@ function hoveredTarget() {
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
+// iOS Safari can suspend the AudioContext mid-session (sometimes triggered by
+// rapid touches or HTML element interactions). Defensively resume on every
+// pointerdown anywhere in the document so playback never silently stalls.
+document.addEventListener('pointerdown', () => {
+  if (audio.ctx && audio.ctx.state !== 'running') {
+    audio.ctx.resume().catch(() => {});
+  }
+}, true);
+
 // Unified mouse + touch input via Pointer Events. Mouse acts on press
 // (preserving existing left/right-click semantics + modifier keys); touch
 // requires a short tap (no drag) and routes through the on-screen control
