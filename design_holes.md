@@ -1,78 +1,92 @@
 # In C — Open Design Questions
 
 Browser-based generative-art game / visualization of Terry Riley's *In C*.
-The player is the **conductor** of an autonomous ensemble of up to N voices,
+The player is the **conductor** of an autonomous ensemble of up to 11 voices,
 each cycling through Riley's 53 melodic patterns. See `roadmap.md` for the
-phased build status; this file lists what's still open.
-
-Resolved questions are documented at the bottom for reference.
-
----
-
-## 1. Spawn cooldown duration (revisit?)
-
-Currently fixed at 20 s. Long enough that adding 11 voices spans roughly
-3.5 minutes of accumulation. Open: should it shorten as more voices are present
-(thicker ensemble absorbs new entries faster), or lengthen (preserves
-contemplative pacing)?
-
-## 2. Global crescendo / diminuendo gesture
-
-Riley specifies the ensemble should swell together. Still no explicit gesture.
-
-- **A. Vertical mouse drag in empty space.** Hold + drag up = crescendo, down = diminuendo.
-- **B. Slider at the top of the screen** next to master volume.
-- **C. Hold spacebar + scroll-wheel.** Composable with other gestures.
-- **D. Dedicated zone** at the bottom of the screen.
-
-Tempo slider already lives in the top bar; an additional swell control there
-might overload it. The drag-in-empty-space option (A) is the most physical but
-risks accidental triggers when spawning voices.
-
-## 3. Spotlight mechanic — drop entirely, or earn its place?
-
-Currently dropped from the active toolkit. Mute/volume/repeat-lock probably
-cover the expressive needs. Revisit only if playtest finds a "hero a single
-voice" gesture missing.
-
-## 4. Conclude transitions — finer specifics
-
-High-level flow is decided and implemented (press 1 → ending mode → all hurry
-to the last figure → manual mute-to-end). Specifics still open:
-
-- Currently in ending mode all dwell/loop checks are bypassed (effectively
-  N=1, T=0). Voices race to the end. Is that too abrupt? Should we keep MIN_LOOPS
-  but skip the dwell?
-- Should Conclude force-unlock all R-locked voices? Currently it doesn't, which
-  means a locked voice will never reach the final figure unless the user
-  manually unlocks. Live anchor or annoyance?
-- After all on the final figure: a second Conclude press could fade master to
-  zero as an alternative to one-by-one muting.
-
-## 5. Per-voice instrument visual identity
-
-Decided: rely on color hue + sonic identity + position; no per-instrument icon.
-Could revisit if 11+ voices feel hard to distinguish at a glance.
-
-## 6. Recording / persistence
-
-Phase 4 territory. Decisions:
-
-- Visual artifact (mandala / trace): planned for Phase 4.
-- Audio recording / export: Phase 6.
-- Gesture-replay file: Phase 6.
+phased build status and `CLAUDE.md` for the project guide; this file is
+just the running list of design questions still up for grabs.
 
 ---
 
-## Resolved
+## 1. Performer personalities
 
-- **Spawn cooldown: 20s** — locked in.
-- **Crescendo gesture: tempo slider lives there but no swell-only control yet.**
-- **Tempo dial: ✓** added in Phase 2 (60–200 BPM slider, default 120).
-- **Pulse viz: ✓** rhythm rings (per-voice + ostinato) added in Phase 2.
-- **Auto-advance rule: ✓** redesigned during Phase 2 follow-up. Now uses
-  MIN_LOOPS=2 + MIN_DWELL=20s. Leading-edge K constraint was tried and
-  removed — it caused an ensemble traffic jam where each new spawn pulled
-  `minIdx` back to figure 1 and capped the leaders.
-- **Master controls: ✓** volume + tempo + Conclude in top bar.
-- **Per-voice instrument viz: skipped** — color + position is enough.
+Phase 3 leftover. Per-voice dwell-time modifiers — *eager* (shorter dwell),
+*patient* (longer), *adventurous* (occasionally skips a figure), *clingy*
+(biased toward the most-common figure in the ensemble). Would push the
+ensemble further from "11 identical agents" toward "11 humans".
+
+Open: assign random per spawn (replay value), tied to instrument
+(predictable), or player-pickable? Subtle behavior or visible glyph?
+
+## 2. Sweep-mute gesture
+
+Phase 3 leftover. Click-and-drag through voices to mute them all in one
+breath; reverse sweep to bring them back. Riley's "drop out and listen" as
+a single physical gesture.
+
+Open: on touch the same gesture is just a swipe — works fine. On desktop
+needs a clear distinction from regular mouse-drag (which currently does
+nothing). Maybe shift-drag.
+
+## 3. Spawn cooldown duration (revisit?)
+
+Currently 10 s. Long enough to feel paced, short enough that a full
+ensemble accretes in under 2 minutes. Could shorten as more voices are
+present (a thicker ensemble absorbs new entries faster), or stay flat.
+
+## 4. Crescendo / diminuendo gesture
+
+Riley specifies the ensemble should swell together. There's no explicit
+gesture for ensemble-wide dynamics. Could be a vertical drag in empty
+space, a top-bar slider, or simply move on (the per-voice volume control
+already lets you do this manually one voice at a time).
+
+## 5. Conclude transitions — finer specifics
+
+High-level flow is decided and implemented. Specifics still open:
+
+- Currently in ending mode all dwell/loop checks are bypassed. Voices race
+  to the end. Is that too abrupt for voices that are far from figure 53?
+- Should Conclude force-unlock all R-locked voices? Currently it doesn't,
+  which means a locked voice will never reach the final figure unless the
+  player manually unlocks. Live anchor or annoyance?
+
+## 6. Audio recording / export
+
+Phase 6 territory. Capture the performance as audio (WAV or MP3),
+downloadable alongside the mandala PNG. Web Audio's `MediaStreamDestination`
++ `MediaRecorder` is the standard route.
+
+## 7. Performer-relationship visuals (beyond what's there)
+
+We have unison strands and polyrhythmic sparkles. There could be subtler
+ones — e.g. a faint "watching" line between voices about to hit unison;
+"shadow" trails behind voices that recently advanced. Probably overkill
+given the existing visual density; flag for future tasteful additions only.
+
+## 8. Crotales — bring back?
+
+Benched in `unused_instruments.md` because they were too insistent at the
+default mix levels. Now that we have per-voice EQ and master EQ, we could
+revisit — gently filter the high frequencies and they might sit better.
+
+---
+
+## Resolved (footer)
+
+- **Spawn cooldown 10 s** — settled.
+- **Tempo dial** — top bar slider, 60–200 BPM.
+- **Reverb** — Theatre@41 convolution + slider control.
+- **3-band master EQ** — bass / mid / treble, ±12 dB.
+- **Stereo positioning** — voices panned by angular position.
+- **Per-note humanization** — velocity, timing, detune.
+- **Pulse / rhythm visualization** — rhythm rings (per-voice + ostinato).
+- **Auto-advance rule** — MIN_LOOPS=2 + MIN_DWELL=20s, no leading-edge K
+  constraint (tried and removed).
+- **Master controls** — volume + tempo + reverb + bass/mid/treble + Random
+  + Conclude + About + ?
+- **Per-voice instrument viz** — color + position is enough.
+- **Mandala artifact** — PNG download via offscreen render.
+- **Touch / mobile** — pointer events + on-screen control panel.
+- **Spotlight mechanic** — dropped, expressive needs covered by mute / volume
+  / lock / advance / reverse.
